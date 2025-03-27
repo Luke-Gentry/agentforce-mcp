@@ -107,15 +107,19 @@ class Config:
 
             processed_path = Path(path=path)
             if path_item.get:
-                processed_path.get = cls._process_operation(path_item.get, api)
+                processed_path.get = cls._process_operation(path, path_item.get, api)
             if path_item.post:
-                processed_path.post = cls._process_operation(path_item.post, api)
+                processed_path.post = cls._process_operation(path, path_item.post, api)
             if path_item.put:
-                processed_path.put = cls._process_operation(path_item.put, api)
+                processed_path.put = cls._process_operation(path, path_item.put, api)
             if path_item.delete:
-                processed_path.delete = cls._process_operation(path_item.delete, api)
+                processed_path.delete = cls._process_operation(
+                    path, path_item.delete, api
+                )
             if path_item.patch:
-                processed_path.patch = cls._process_operation(path_item.patch, api)
+                processed_path.patch = cls._process_operation(
+                    path, path_item.patch, api
+                )
             paths.append(processed_path)
 
         return cls(paths=paths)
@@ -205,7 +209,7 @@ class Config:
                     type="array",
                     items=SchemaProperty(
                         name="item",
-                        type=resolved_schema.items.type,
+                        type=resolved_schema.items.type or "object",
                         properties=cls._process_schema(
                             resolved_schema.items, api
                         ).properties,
@@ -218,7 +222,7 @@ class Config:
         )
 
     @classmethod
-    def _process_operation(cls, operation, api) -> Operation:
+    def _process_operation(cls, path_name, operation, api) -> Operation:
         """Process operation and return an Operation model."""
         processed_params = []
         for param in operation.parameters:
@@ -274,7 +278,7 @@ class Config:
             )
 
         return Operation(
-            id=operation.operationId,
+            id=operation.operationId or path_name,
             summary=operation.summary,
             description=operation.description,
             parameters=processed_params,

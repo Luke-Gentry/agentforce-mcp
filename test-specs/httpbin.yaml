@@ -1,0 +1,375 @@
+openapi: 3.0.1
+info:
+  title: HttpBin API
+  description: A simple HTTP Request & Response Service for testing HTTP clients
+  version: 1.0.0
+  contact:
+    name: HttpBin Support
+    url: https://httpbin.org
+servers:
+  - url: https://httpbin.org
+    description: Production server
+  - url: http://httpbin.org
+    description: Production server (non-secure)
+tags:
+  - name: HTTP Methods
+    description: Endpoints for testing different HTTP verbs
+  - name: Auth
+    description: Endpoints for testing authentication methods
+  - name: Status Codes
+    description: Endpoints that return different HTTP status codes
+  - name: Request Inspection
+    description: Endpoints for inspecting request data
+  - name: Response Formats
+    description: Endpoints that return various response formats
+  - name: Dynamic Data
+    description: Endpoints that generate random and dynamic data
+  - name: Cookies
+    description: Endpoints for testing cookie operations
+
+paths:
+  /get:
+    get:
+      tags:
+        - HTTP Methods
+      summary: Returns GET data
+      description: Returns the GET request's data including headers, arguments, etc.
+      operationId: getRequest
+      parameters:
+        - name: freeform
+          in: query
+          schema:
+            type: object
+            additionalProperties: true
+          style: form
+          explode: true
+          description: Any query parameters you want to test with
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetResponse"
+
+  /post:
+    post:
+      tags:
+        - HTTP Methods
+      summary: Returns POST data
+      description: Returns the POST request's data including form data, JSON, headers, etc.
+      operationId: postRequest
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostResponse"
+
+  /basic-auth/{user}/{password}:
+    get:
+      tags:
+        - Auth
+      summary: Tests Basic Auth
+      description: Tests HTTP Basic Authentication
+      operationId: basicAuth
+      parameters:
+        - name: user
+          in: path
+          description: Username for Basic Auth
+          required: true
+          schema:
+            type: string
+        - name: password
+          in: path
+          description: Password for Basic Auth
+          required: true
+          schema:
+            type: string
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authenticated:
+                    type: boolean
+                    example: true
+                  user:
+                    type: string
+                    description: The username provided
+        "401":
+          description: Unauthorized
+
+  /status/{code}:
+    get:
+      tags:
+        - Status Codes
+      summary: Returns specified status code
+      description: Returns the specified HTTP Status code
+      operationId: statusCode
+      parameters:
+        - name: code
+          in: path
+          description: HTTP status code to return
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 100
+            maximum: 599
+            example: 200
+      responses:
+        "200":
+          description: 2XX status code returned
+        "300":
+          description: 3XX status code returned
+        "400":
+          description: 4XX status code returned
+        "500":
+          description: 5XX status code returned
+
+  /ip:
+    get:
+      tags:
+        - Request Inspection
+      summary: Returns origin IP
+      description: Returns the requester's IP address
+      operationId: getIp
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  origin:
+                    type: string
+                    description: The requester's IP address
+                    example: "140.112.92.25"
+
+  /headers:
+    get:
+      tags:
+        - Request Inspection
+      summary: Returns headers
+      description: Returns the request's HTTP headers
+      operationId: getHeaders
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  headers:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Header key-value pairs
+
+  /user-agent:
+    get:
+      tags:
+        - Request Inspection
+      summary: Returns user-agent
+      description: Returns the requester's user-agent string
+      operationId: getUserAgent
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "user-agent":
+                    type: string
+                    description: The requester's user agent
+                    example: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+  /image/{format}:
+    get:
+      tags:
+        - Response Formats
+      summary: Returns an image
+      description: Returns an image in the specified format
+      operationId: getImage
+      parameters:
+        - name: format
+          in: path
+          description: Image format to return
+          required: true
+          schema:
+            type: string
+            enum: [png, jpeg, webp]
+            default: png
+      responses:
+        "200":
+          description: An image in the requested format
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+
+  /delay/{seconds}:
+    get:
+      tags:
+        - Dynamic Data
+      summary: Delayed response
+      description: Returns a delayed response (max of 10 seconds)
+      operationId: getDelay
+      parameters:
+        - name: seconds
+          in: path
+          description: Delay in seconds
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 10
+            default: 3
+      responses:
+        "200":
+          description: Successful operation (after delay)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetResponse"
+
+  /cookies:
+    get:
+      tags:
+        - Cookies
+      summary: Returns cookies
+      description: Returns the cookies sent with the request
+      operationId: getCookies
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cookies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Cookie key-value pairs
+
+components:
+  schemas:
+    GetResponse:
+      type: object
+      properties:
+        args:
+          type: object
+          additionalProperties:
+            type: string
+          description: The request query parameters
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: The request headers
+        origin:
+          type: string
+          description: The requester's IP address
+          example: "140.112.92.25"
+        url:
+          type: string
+          format: uri
+          description: The URL of the request
+          example: "https://httpbin.org/get"
+      required:
+        - args
+        - headers
+        - origin
+        - url
+
+    PostResponse:
+      type: object
+      properties:
+        args:
+          type: object
+          additionalProperties:
+            type: string
+          description: The request query parameters
+        data:
+          type: string
+          description: Raw request body data
+        files:
+          type: object
+          additionalProperties:
+            type: string
+          description: Files uploaded in the request
+        form:
+          type: object
+          additionalProperties:
+            type: string
+          description: Form parameters sent in the request
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: The request headers
+        json:
+          type: object
+          nullable: true
+          description: JSON decoded form data (if applicable)
+        origin:
+          type: string
+          description: The requester's IP address
+          example: "140.112.92.25"
+        url:
+          type: string
+          format: uri
+          description: The URL of the request
+          example: "https://httpbin.org/post"
+      required:
+        - args
+        - headers
+        - origin
+        - url
+
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic

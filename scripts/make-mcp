@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
+# stdlib
 import argparse
 import os
 import subprocess
 
-from mcp_gen.openapi import Config
+# 3p
 from jinja2 import Environment, FileSystemLoader
-from mcp_gen.tools import tools_from_config
+
+# project
+from mcp_openapi.parser import Config
+from mcp_openapi.tools import tools_from_config
 
 
 def generate_server(
@@ -14,7 +18,11 @@ def generate_server(
 ):
     os.makedirs(output_dir, exist_ok=True)
     env = Environment(
-        loader=FileSystemLoader("templates"), trim_blocks=True, lstrip_blocks=True
+        loader=FileSystemLoader(
+            os.path.dirname(os.path.abspath(__file__)) + "/templates"
+        ),
+        trim_blocks=True,
+        lstrip_blocks=True,
     )
 
     # Get the template
@@ -37,12 +45,24 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate Pydantic models from OpenAPI spec"
     )
-    parser.add_argument(
-        "-f", "--open-api-spec", required=True, help="Path to OpenAPI spec YAML file"
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-f",
+        "--open-api-spec",
+        required=False,
+        help="Path to OpenAPI spec YAML file",
+    )
+    group.add_argument(
+        "-u",
+        "--open-api-spec-url",
+        required=False,
+        help="URL to OpenAPI spec YAML file",
     )
     parser.add_argument("--routes", nargs="+", required=True, help="Routes to process")
     parser.add_argument(
-        "--output-dir", default="servers", help="Output directory for generated servers"
+        "--output-dir",
+        default=os.path.dirname(os.path.abspath(__file__)) + "/servers",
+        help="Output directory for generated servers",
     )
     parser.add_argument(
         "-n", "--app-name", required=True, help="Name of the application"
@@ -50,11 +70,14 @@ def main():
     parser.add_argument(
         "-r", "--app-route", required=True, help="Route name for the application"
     )
-    parser.add_argument("-u", "--base-url", required=True, help="Base URL for the API")
+    parser.add_argument("-b", "--base-url", required=True, help="Base URL for the API")
 
     args = parser.parse_args()
 
-    config = Config.from_file(args.open_api_spec, args.routes)
+    if args.open_api_spec_url:
+        config = Config.from_url(args.open_api_spec_url, args.routes)
+    else:
+        config = Config.from_file(args.open_api_spec, args.routes)
     output_path = generate_server(
         config, args.output_dir, args.app_name, args.app_route, args.base_url
     )

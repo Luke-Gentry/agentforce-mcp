@@ -204,6 +204,94 @@ def sample_openapi_spec_with_refs():
     }
 
 
+@pytest.fixture
+def nasa_apod_spec():
+    return {
+        "openapi": "3.0.0",
+        "servers": [
+            {"url": "https://api.nasa.gov/planetary"},
+            {"url": "http://api.nasa.gov/planetary"},
+        ],
+        "info": {
+            "contact": {"email": "evan.t.yates@nasa.gov"},
+            "description": "This endpoint structures the APOD imagery and associated metadata so that it can be repurposed for other applications. In addition, if the concept_tags parameter is set to True, then keywords derived from the image explanation are returned. These keywords could be used as auto-generated hashtags for twitter or instagram feeds; but generally help with discoverability of relevant imagery",
+            "license": {
+                "name": "Apache 2.0",
+                "url": "http://www.apache.org/licenses/LICENSE-2.0.html",
+            },
+            "title": "APOD",
+            "version": "1.0.0",
+            "x-apisguru-categories": ["media", "open_data"],
+            "x-origin": [
+                {
+                    "format": "swagger",
+                    "url": "https://raw.githubusercontent.com/nasa/api-docs/gh-pages/assets/json/APOD",
+                    "version": "2.0",
+                }
+            ],
+            "x-providerName": "nasa.gov",
+            "x-serviceName": "apod",
+        },
+        "tags": [
+            {
+                "description": "An example tag",
+                "externalDocs": {
+                    "description": "Here's a link",
+                    "url": "https://example.com",
+                },
+                "name": "request tag",
+            }
+        ],
+        "paths": {
+            "/apod": {
+                "get": {
+                    "description": "Returns the picture of the day",
+                    "parameters": [
+                        {
+                            "description": "The date of the APOD image to retrieve",
+                            "in": "query",
+                            "name": "date",
+                            "required": False,
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "description": "Retrieve the URL for the high resolution image",
+                            "in": "query",
+                            "name": "hd",
+                            "required": False,
+                            "schema": {"type": "boolean"},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "items": {"x-thing": "ok"},
+                                        "type": "array",
+                                    }
+                                }
+                            },
+                            "description": "successful operation",
+                        },
+                        "400": {
+                            "description": "Date must be between Jun 16, 1995 and Mar 28, 2019."
+                        },
+                    },
+                    "security": [{"api_key": []}],
+                    "summary": "Returns images",
+                    "tags": ["request tag"],
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "api_key": {"in": "query", "name": "api_key", "type": "apiKey"}
+            }
+        },
+    }
+
+
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     # Create a temporary OpenAPI spec file
     spec_file = tmp_path / "openapi.json"
@@ -348,3 +436,42 @@ def test_parameter_reference_resolution(tmp_path, sample_openapi_spec_with_refs)
     assert param.in_ == "path"
     assert param.required is True
     assert param.type == "string"
+
+
+def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
+    # Create a temporary OpenAPI spec file
+    spec_file = tmp_path / "nasa_apod.json"
+    with open(spec_file, "w") as f:
+        json.dump(nasa_apod_spec, f)
+
+    # Parse the spec
+    config = Config.from_file(str(spec_file), ["/apod"], base_path=tmp_path)
+
+    # Basic validation
+    assert len(config.paths) == 1
+    assert config.paths[0].path == "/apod"
+
+    # Validate GET operation
+    get_op = config.paths[0].get
+    assert get_op.id == "/apod"
+    assert get_op.summary == "Returns images"
+    assert get_op.description == "Returns the picture of the day"
+
+    # Validate parameters
+    assert len(get_op.parameters) == 2
+    date_param = next(p for p in get_op.parameters if p.name == "date")
+    assert date_param.in_ == "query"
+    assert date_param.required is False
+    assert date_param.type == "string"
+
+    hd_param = next(p for p in get_op.parameters if p.name == "hd")
+    assert hd_param.in_ == "query"
+    assert hd_param.required is False
+    assert hd_param.type == "boolean"
+
+    # Validate responses
+    assert "200" in get_op.responses
+    assert "400" in get_op.responses
+    success_response = get_op.responses["200"]
+    assert success_response.format == "application/json"
+    assert success_response.description == "successful operation"
