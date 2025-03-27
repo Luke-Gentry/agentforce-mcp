@@ -19,6 +19,7 @@ from mcp_openapi.tools import (
     Tool,
     create_tool_function_exec,
 )
+from mcp_openapi.recorder import MCPRecorder
 
 
 logger = logging.getLogger(__name__)
@@ -104,12 +105,15 @@ class ServerManager:
             @dataclass
             class AppContext:
                 base_url: str
+                recorder: MCPRecorder
 
             @asynccontextmanager
             async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
                 """Manage application lifecycle with type-safe context"""
                 try:
-                    yield AppContext(base_url=base_url)
+                    # Create recorder with namespace-specific cassette directory
+                    recorder = MCPRecorder(cassette_dir=f"cassettes/{namespace}")
+                    yield AppContext(base_url=base_url, recorder=recorder)
                 finally:
                     pass
 

@@ -3,12 +3,10 @@ import inspect
 import types
 
 # 3p
-import httpx
 from pydantic import BaseModel
 
 # project
 from mcp_openapi import parser
-
 
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
@@ -154,22 +152,22 @@ def create_tool_function_noexec(tool):
     # Define a template function that will be used as the code template
     async def template_tool_function(ctx: Context, *args, **kwargs):
         """Template function whose code will be reused"""
-        # Extract base URL from context
+        # Extract base URL and recorder from context
         base_url = ctx.request_context.lifespan_context.base_url
+        recorder = ctx.request_context.lifespan_context.recorder
 
         # Build params and json data from kwargs
         params = {k: v for k, v in kwargs.items() if not k.startswith("j_")}
-        json = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
+        json_body = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
 
-        # Make the API request
-        async with httpx.AsyncClient() as client:
-            response = await client.request(
-                method=tool.method,
-                url=f"{base_url}{tool.path}",
-                params=params,
-                json=json,
-            )
-            return response.text
+        # Make the API request through the recorder
+        response = await recorder.do_request(
+            method=tool.method,
+            url=f"{base_url}{tool.path}",
+            params=params,
+            json_body=json_body,
+        )
+        return response.text
 
     # Create parameter objects for the signature
     parameters = [
@@ -254,17 +252,17 @@ def create_tool_function_exec(tool):
     ) -> dict:
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
+    recorder = ctx.request_context.lifespan_context.recorder
     params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.name.startswith('j_'))} }}
-    json = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
+    json_body = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method="{tool.method}",
-            url=f"{{base_url}}{tool.path}",
-            params=params,
-            json=json,
-        )
-        return response.text"""
+    response = await recorder.do_request(
+        method="{tool.method}",
+        url=f"{{base_url}}{tool.path}",
+        params=params,
+        json_body=json_body,
+    )
+    return response.text"""
 
     # Execute the function definition
     local_vars = {}
