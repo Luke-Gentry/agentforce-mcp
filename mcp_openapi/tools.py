@@ -154,14 +154,14 @@ def create_tool_function_noexec(tool):
         """Template function whose code will be reused"""
         # Extract base URL and recorder from context
         base_url = ctx.request_context.lifespan_context.base_url
-        recorder = ctx.request_context.lifespan_context.recorder
+        proxy = ctx.request_context.lifespan_context.proxy
 
         # Build params and json data from kwargs
         params = {k: v for k, v in kwargs.items() if not k.startswith("j_")}
         json_body = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
 
         # Make the API request through the recorder
-        response = await recorder.do_request(
+        response = await proxy.do_request(
             request=ctx.request_context.request,
             method=tool.method,
             url=f"{base_url}{tool.path}",
@@ -253,11 +253,11 @@ def create_tool_function_exec(tool):
     ) -> dict:
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
-    recorder = ctx.request_context.lifespan_context.recorder
+    proxy = ctx.request_context.lifespan_context.proxy
     params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.name.startswith('j_'))} }}
     json_body = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
 
-    response = await recorder.do_request(
+    response = await proxy.do_request(
         request=ctx.request_context.request,
         method="{tool.method}",
         url=f"{{base_url}}{tool.path}",

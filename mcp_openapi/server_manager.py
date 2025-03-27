@@ -106,17 +106,17 @@ class ServerManager:
             @dataclass
             class AppContext:
                 base_url: str
-                recorder: MCPProxy
+                proxy: MCPProxy
 
             @asynccontextmanager
             async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
                 """Manage application lifecycle with type-safe context"""
                 try:
                     # Create recorder with namespace-specific cassette directory
-                    recorder = MCPProxy(
+                    proxy = MCPProxy(
                         cassette_dir=f"cassettes/{namespace}", headers=headers
                     )
-                    yield AppContext(base_url=base_url, recorder=recorder)
+                    yield AppContext(base_url=base_url, proxy=proxy)
                 finally:
                     pass
 

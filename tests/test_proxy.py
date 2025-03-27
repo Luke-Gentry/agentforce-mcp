@@ -25,7 +25,9 @@ def mock_httpx_client():
 def proxy(tmp_path, mock_httpx_client):
     """Create a proxy instance with a temporary cassette directory and mock client."""
     return MCPProxy(
-        cassette_dir=str(tmp_path), client_builder=lambda: mock_httpx_client
+        cassette_dir=str(tmp_path),
+        client_builder=lambda: mock_httpx_client,
+        record=True,
     )
 
 

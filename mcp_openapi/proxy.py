@@ -20,6 +20,7 @@ class MCPProxy:
         cassette_dir: str = "cassettes",
         forward_headers: Optional[Dict[str, Any]] = None,
         client_builder: Optional[Callable[[], httpx.AsyncClient]] = None,
+        record: bool = False,
     ):
         """Initialize the recorder with a directory to store cassettes.
 
@@ -32,6 +33,7 @@ class MCPProxy:
         self.cassette_dir.mkdir(parents=True, exist_ok=True)
         self.forward_headers = forward_headers
         self.client_builder = client_builder or (lambda: httpx.AsyncClient())
+        self.record = record
 
     async def do_request(
         self,
@@ -85,25 +87,27 @@ class MCPProxy:
         finally:
             await client.aclose()
 
-        # Record the request and response
-        cassette_data = {
-            "request": {
-                "method": method,
-                "url": url,
-                "params": params,
-                "json": json_body,
-            },
-            "response": {
-                "status_code": response.status_code,
-                "headers": dict(response.headers),
-                "text": response.text,
-            },
-            "timestamp": timestamp,
-        }
+        if self.record:
+            # Record the request and response
+            cassette_data = {
+                "request": {
+                    "method": method,
+                    "url": url,
+                    "params": params,
+                    "json": json_body,
+                },
+                "response": {
+                    "status_code": response.status_code,
+                    "headers": dict(response.headers),
+                    "text": response.text,
+                },
+                "timestamp": timestamp,
+            }
 
-        # Save to file
-        with open(cassette_path, "w") as f:
-            json.dump(cassette_data, f, indent=2)
+            # Save to file
+            with open(cassette_path, "w") as f:
+                json.dump(cassette_data, f, indent=2)
 
-        logger.info(f"Request recorded to {cassette_path}")
+            logger.info(f"Request recorded to {cassette_path}")
+
         return response

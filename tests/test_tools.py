@@ -9,6 +9,9 @@ from mcp_openapi.tools import (
     create_tool_function_exec,
     create_tool_function_noexec,
 )
+from mcp_openapi.proxy import MCPProxy
+
+from starlette.requests import Request
 
 
 @pytest.fixture
@@ -47,8 +50,16 @@ def mock_context():
         class RequestContext:
             class LifespanContext:
                 base_url = "http://test.com"
+                proxy = MCPProxy(record=False)
 
             lifespan_context = LifespanContext()
+            request = Request(
+                scope={
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/test",
+                }
+            )
 
         request_context = RequestContext()
 
@@ -65,10 +76,14 @@ async def test_tool_function_noexec(mock_tool, mock_context):
     mock_response = AsyncMock()
     mock_response.text = '{"result": "success"}'
 
+    # Create an AsyncMock for the client itself
+    mock_client_instance = AsyncMock()
+    mock_client_instance.request.return_value = mock_response
+    mock_client_instance.aclose = AsyncMock()  # Add mock for aclose method
+
     with patch("httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value.request.return_value = (
-            mock_response
-        )
+        # Return the mock client instance directly instead of using __aenter__
+        mock_client.return_value = mock_client_instance
 
         # Test function execution
         result = await tool_func(
@@ -76,10 +91,9 @@ async def test_tool_function_noexec(mock_tool, mock_context):
         )
 
         # Verify the request was made correctly
-        mock_client.return_value.__aenter__.return_value.request.assert_called_once()
-        call_args = mock_client.return_value.__aenter__.return_value.request.call_args[
-            1
-        ]
+        mock_client_instance.request.assert_called_once()
+        call_args = mock_client_instance.request.call_args[1]
+
         assert call_args["method"] == "POST"
         assert call_args["url"] == "http://test.com/test/path"
         assert call_args["params"] == {"param1": "test", "param2": 123}
@@ -97,10 +111,14 @@ async def test_tool_function_exec(mock_tool, mock_context):
     mock_response = AsyncMock()
     mock_response.text = '{"result": "success"}'
 
+    # Create an AsyncMock for the client itself
+    mock_client_instance = AsyncMock()
+    mock_client_instance.request.return_value = mock_response
+    mock_client_instance.aclose = AsyncMock()  # Add mock for aclose method
+
     with patch("httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value.request.return_value = (
-            mock_response
-        )
+        # Return the mock client instance directly instead of using __aenter__
+        mock_client.return_value = mock_client_instance
 
         # Test function execution
         result = await tool_func(
@@ -108,10 +126,8 @@ async def test_tool_function_exec(mock_tool, mock_context):
         )
 
         # Verify the request was made correctly
-        mock_client.return_value.__aenter__.return_value.request.assert_called_once()
-        call_args = mock_client.return_value.__aenter__.return_value.request.call_args[
-            1
-        ]
+        mock_client_instance.request.assert_called_once()
+        call_args = mock_client_instance.request.call_args[1]
         assert call_args["method"] == "POST"
         assert call_args["url"] == "http://test.com/test/path"
         assert call_args["params"] == {"param1": "test", "param2": 123}
