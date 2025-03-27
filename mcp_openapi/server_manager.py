@@ -92,7 +92,7 @@ class ServerManager:
         url = server_config["url"]
         base_url = server_config["base_url"]
         paths = server_config["paths"]
-        headers = server_config["headers"]
+        forward_headers = server_config.get("headers", [])
 
         logger.info(f"Starting server for {name} ({namespace})")
 
@@ -114,7 +114,8 @@ class ServerManager:
                 try:
                     # Create recorder with namespace-specific cassette directory
                     proxy = MCPProxy(
-                        cassette_dir=f"cassettes/{namespace}", headers=headers
+                        cassette_dir=f"cassettes/{namespace}",
+                        forward_headers=forward_headers,
                     )
                     yield AppContext(base_url=base_url, proxy=proxy)
                 finally:
