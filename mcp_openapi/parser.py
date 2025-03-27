@@ -1,5 +1,6 @@
 # stdlib
 from typing import Dict, List, Optional, Any
+import re
 
 # 3p
 import aiopenapi3
@@ -73,28 +74,37 @@ class Path(BaseModel):
 
 class Config:
     @classmethod
-    def from_file(cls, file_path: str, routes: list[str]):
+    def from_file(
+        cls,
+        file_path: str,
+        path_patterns: list[str],
+        base_path=pathlib.Path("").absolute(),
+    ):
         api = aiopenapi3.OpenAPI.load_file(
             file_path,
             file_path,
-            loader=aiopenapi3.FileSystemLoader(pathlib.Path("").absolute()),
+            loader=aiopenapi3.FileSystemLoader(base_path),
         )
-        return cls._from_api(api, routes)
+        return cls._from_api(api, path_patterns)
 
     @classmethod
-    def from_url(cls, url: str, routes: list[str]):
+    def from_url(cls, url: str, path_patterns: list[str]):
         api = aiopenapi3.OpenAPI.load_sync(
             url,
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
         )
-        return cls._from_api(api, routes)
+        return cls._from_api(api, path_patterns)
 
     @classmethod
-    def _from_api(cls, api: aiopenapi3.OpenAPI, routes: list[str]):
+    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]):
         paths = []
+
+        compiled_patterns = [re.compile(pattern) for pattern in path_patterns]
         for path, path_item in api.paths.paths.items():
-            if path not in routes:
+            # Check if path matches any of the patterns
+            if not any(pattern.match(path) for pattern in compiled_patterns):
                 continue
+
             processed_path = Path(path=path)
             if path_item.get:
                 processed_path.get = cls._process_operation(path_item.get, api)
@@ -188,7 +198,20 @@ class Config:
                             nested_properties.append(nested_prop)
 
                 properties.append(prop)
-
+        elif resolved_schema.type == "array":
+            properties.append(
+                SchemaProperty(
+                    name="inline",
+                    type="array",
+                    items=SchemaProperty(
+                        name="item",
+                        type=resolved_schema.items.type,
+                        properties=cls._process_schema(
+                            resolved_schema.items, api
+                        ).properties,
+                    ),
+                )
+            )
         return Schema(
             name=schema_name,
             properties=properties,
