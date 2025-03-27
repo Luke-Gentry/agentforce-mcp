@@ -41,4 +41,4 @@ servers:
 '''
 
 [start]
-  cmd = "python main.py --config assets/servers.yaml"
+  cmd = "python main.py --config /assets/servers.yaml"
