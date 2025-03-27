@@ -1,6 +1,18 @@
 [staticAssets]
 "servers.yaml" = '''
 servers:
+  - namespace: stripe
+    # Define headers to forward to the server
+    headers:
+      - Authorization
+    # This is the name as it appears to the LLM
+    name: Stripe API
+    url: https://raw.githubusercontent.com/conorbranagan/mcp-openapi/refs/heads/main/test-specs/stripe-customers.yaml
+    base_url: https://api.stripe.com
+    # Select which API paths to expose over MCP
+    paths:
+      - /v1/customers$
+
   - namespace: httpbin
     name: httpbin
     url: https://raw.githubusercontent.com/conorbranagan/mcp-openapi/refs/heads/main/test-specs/httpbin.yaml
