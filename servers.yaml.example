@@ -1,8 +1,8 @@
 servers:
   - namespace: httpbin
     name: httpbin
-    url: file://apis/httpbin.yaml
-    base_url: https://httpbin.org/
+    url: file://test-specs/httpbin.yaml
+    base_url: https://httpbin.org
     paths:
       - /get
       - /status
@@ -10,17 +10,9 @@ servers:
       - /headers
       - /user-agent
 
-  - namespace: zendesk
-    name: Zendesk API
-    url: file://apis/zendesk-oas.yaml
-    base_url: https://api.zendesk.com
+  - namespace: stripe
+    name: Stripe API
+    url: https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml
+    base_url: https://api.stripe.com
     paths:
-      - /api/v2/tickets$
-      - /api/v2/users$
-
-  # - namespace: weather
-  #   name: OpenWeatherMap API
-  #   url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
-  #   base_url: https://api.openweathermap.org/data/2.5
-  #   paths:
-  #     - /data/2.5/weather
+      - /v1/customers$

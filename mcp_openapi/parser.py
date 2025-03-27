@@ -1,11 +1,21 @@
 # stdlib
 from typing import Dict, List, Optional, Any
 import re
+import logging
+import pickle
+import hashlib
+from pathlib import Path
 
 # 3p
 import aiopenapi3
 import pathlib
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+# Create cache directory in the user's home directory
+CACHE_DIR = Path.home() / ".mcp-openapi" / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 """
 
@@ -80,20 +90,56 @@ class Config:
         path_patterns: list[str],
         base_path=pathlib.Path("").absolute(),
     ):
+        # Create cache key from file path and patterns
+        cache_key = hashlib.md5(
+            f"{file_path}:{','.join(sorted(path_patterns))}".encode()
+        ).hexdigest()
+        cache_file = CACHE_DIR / f"{cache_key}.pickle"
+
+        if cache_file.exists():
+            logger.info(f"Loading cached OpenAPI spec from {cache_file}")
+            with open(cache_file, "rb") as f:
+                return pickle.load(f)
+
+        logger.info(f"Cold loading OpenAPI spec from {file_path}")
         api = aiopenapi3.OpenAPI.load_file(
             file_path,
             file_path,
             loader=aiopenapi3.FileSystemLoader(base_path),
         )
-        return cls._from_api(api, path_patterns)
+        config = cls._from_api(api, path_patterns)
+
+        # Cache the result
+        with open(cache_file, "wb") as f:
+            pickle.dump(config, f)
+
+        return config
 
     @classmethod
     def from_url(cls, url: str, path_patterns: list[str]):
+        # Create cache key from URL and patterns
+        cache_key = hashlib.md5(
+            f"{url}:{','.join(sorted(path_patterns))}".encode()
+        ).hexdigest()
+        cache_file = CACHE_DIR / f"{cache_key}.pickle"
+
+        if cache_file.exists():
+            logger.info(f"Loading cached OpenAPI spec from {cache_file}")
+            with open(cache_file, "rb") as f:
+                return pickle.load(f)
+
+        logger.info(f"Cold loading OpenAPI spec from {url}")
         api = aiopenapi3.OpenAPI.load_sync(
             url,
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
         )
-        return cls._from_api(api, path_patterns)
+        config = cls._from_api(api, path_patterns)
+
+        # Cache the result
+        with open(cache_file, "wb") as f:
+            pickle.dump(config, f)
+
+        return config
 
     @classmethod
     def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]):
@@ -175,7 +221,9 @@ class Config:
                                 properties=item_properties,
                             )
                     else:
-                        prop.items = SchemaProperty(name="item", type=item_schema.type)
+                        prop.items = SchemaProperty(
+                            name="item", type=item_schema.type or "object"
+                        )
 
                 elif prop_type == "object":
                     if hasattr(prop_schema, "ref"):

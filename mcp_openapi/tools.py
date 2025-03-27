@@ -53,7 +53,7 @@ class Tool(BaseModel):
 
         # We'll map the request body to params but with a prefix so the tool
         # can put it in the body of the request.
-        if operation.request_body_:
+        if operation.request_body_ and operation.request_body_.schema_:
             for param in operation.request_body_.schema_.properties:
                 if param.properties:
                     for nested_param in param.properties:
@@ -162,6 +162,7 @@ def create_tool_function_noexec(tool):
 
         # Make the API request through the recorder
         response = await recorder.do_request(
+            request=ctx.request_context.request,
             method=tool.method,
             url=f"{base_url}{tool.path}",
             params=params,
@@ -257,6 +258,7 @@ def create_tool_function_exec(tool):
     json_body = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
 
     response = await recorder.do_request(
+        request=ctx.request_context.request,
         method="{tool.method}",
         url=f"{{base_url}}{tool.path}",
         params=params,

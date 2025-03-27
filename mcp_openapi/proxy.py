@@ -3,35 +3,44 @@ import logging
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
+from starlette.requests import Request
 
 # 3p
 import httpx
-from httpx import Response
 
 logger = logging.getLogger(__name__)
 
 
-class MCPRecorder:
+class MCPProxy:
     """A class to intercept and record HTTP requests made through httpx clients."""
 
-    def __init__(self, cassette_dir: str = "cassettes"):
+    def __init__(
+        self,
+        cassette_dir: str = "cassettes",
+        forward_headers: Optional[Dict[str, Any]] = None,
+        client_builder: Optional[Callable[[], httpx.AsyncClient]] = None,
+    ):
         """Initialize the recorder with a directory to store cassettes.
 
         Args:
             cassette_dir: Directory where request/response cassettes will be stored
+            forward_headers: Headers to forward from the incoming request
+            client_builder: Function that returns an AsyncClient. Defaults to creating a new httpx.AsyncClient
         """
         self.cassette_dir = Path(cassette_dir)
         self.cassette_dir.mkdir(parents=True, exist_ok=True)
+        self.forward_headers = forward_headers
+        self.client_builder = client_builder or (lambda: httpx.AsyncClient())
 
     async def do_request(
         self,
+        request: Request,
         method: str,
         url: str,
         params: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Response:
+    ) -> httpx.Response:
         """Record and execute an HTTP request.
 
         Args:
@@ -44,6 +53,13 @@ class MCPRecorder:
         Returns:
             The httpx Response object
         """
+        # Pass along any headers that were set in the server config
+        request_headers = {}
+        if self.forward_headers:
+            for header in self.forward_headers:
+                if header in request.headers:
+                    request_headers[header] = request.headers[header]
+
         # Create a unique filename for this request
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}_{method.lower()}_{Path(url).name}.json"
@@ -56,15 +72,18 @@ class MCPRecorder:
         if json_body:
             logger.debug(f"Request body: {json_body}")
 
-        # Make the actual request
-        async with httpx.AsyncClient() as client:
+        # Make the actual request using the provided client builder
+        client = self.client_builder()
+        try:
             response = await client.request(
                 method=method,
                 url=url,
                 params=params,
                 json=json_body,
-                **kwargs,
+                headers=request_headers,
             )
+        finally:
+            await client.aclose()
 
         # Record the request and response
         cassette_data = {
@@ -73,7 +92,6 @@ class MCPRecorder:
                 "url": url,
                 "params": params,
                 "json": json_body,
-                "headers": dict(response.request.headers),
             },
             "response": {
                 "status_code": response.status_code,

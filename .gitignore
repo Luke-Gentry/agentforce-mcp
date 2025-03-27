@@ -18,3 +18,4 @@ apis/
 scripts/servers
 servers.yaml
 cassettes/
+.mcp-openapi/
