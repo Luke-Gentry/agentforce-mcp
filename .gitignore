@@ -13,5 +13,7 @@ wheels/
 .mypy_cache
 .DS_Store
 
+# Project
 apis/
+scripts/servers
 servers.yaml
