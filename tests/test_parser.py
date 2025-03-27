@@ -1,6 +1,6 @@
 import json
 import pytest
-from mcp_openapi.parser import Config, Path, Operation, Parameter, Response
+from mcp_openapi.parser import Config
 
 
 @pytest.fixture

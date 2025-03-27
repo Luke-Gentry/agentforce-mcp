@@ -57,7 +57,6 @@ Alongside the MCP servers, the server exposes a couple HTTP endpoints for diagno
 - `/tools/` and `/tools/{namespace}` will show the tools that are exposed.
 
 ```bash
-curl -s localhost:8000/tools | jq '.'
 {
   "httpbin": [
     {
@@ -73,6 +72,18 @@ curl -s localhost:8000/tools | jq '.'
       ]
     },
     {
+      "name": "status_code",
+      "description": "Returns specified status code",
+      "parameters": [
+        {
+          "name": "code",
+          "type": "int",
+          "default": null,
+          "description": "HTTP status code to return"
+        }
+      ]
+    },
+    {
       "name": "get_ip",
       "description": "Returns origin IP",
       "parameters": []
@@ -80,6 +91,11 @@ curl -s localhost:8000/tools | jq '.'
     {
       "name": "get_headers",
       "description": "Returns headers",
+      "parameters": []
+    },
+    {
+      "name": "get_user_agent",
+      "description": "Returns user-agent",
       "parameters": []
     }
   ]
