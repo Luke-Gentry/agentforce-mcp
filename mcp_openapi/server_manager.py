@@ -18,7 +18,6 @@ from mcp_openapi.tools import (
     tools_from_config,
     Tool,
     create_tool_function_exec,
-    create_tool_function_noexec,
 )
 
 
