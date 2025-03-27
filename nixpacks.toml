@@ -1,5 +1,5 @@
 [staticAssets]
-servers.yaml = '''
+"servers.yaml" = '''
 servers:
   - namespace: stripe
     # Define headers to forward to the server
