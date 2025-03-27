@@ -14,12 +14,11 @@ from mcp.server.fastmcp import FastMCP
 
 # project
 from mcp_openapi.parser import Config
-from mcp_openapi.tools import tools_from_config, Tool
-
-# Imports for the tool functions
-from pydantic import Field  # noqa: F401
-from mcp.server.fastmcp import Context  # noqa: F401
-import httpx  # noqa: F401
+from mcp_openapi.tools import (
+    tools_from_config,
+    Tool,
+    create_tool_function_exec,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -119,58 +118,17 @@ class ServerManager:
                 lifespan=app_lifespan,
                 sse_path=f"/{namespace}/sse",
                 message_path=f"/{namespace}/messages/",
-                debug=True,
             )
 
             tools = tools_from_config(config)
             self.tools[namespace] = tools
 
             for tool in tools:
-
-                def create_tool_function(tool):
-                    params = []
-                    for param in tool.parameters:
-                        param_str = f"{param.name}: {param.type}"
-                        if param.description or param.default:
-                            field_parts = []
-                            if param.description:
-                                field_parts.append(f'description="{param.description}"')
-                            if param.default:
-                                field_parts.append(f"default={param.default}")
-                            param_str += f" = Field({', '.join(field_parts)})"
-                        params.append(param_str)
-
-                    # Build the function signature with explicit parameters
-                    # We have to use exec() for now to make this work with all the typing we want.
-                    body = f"""async def {tool.name}(
-                        ctx: Context,
-                        {', '.join(params)}
-                    ) -> dict:
-    \"\"\"{tool.description}\"\"\"
-    base_url = ctx.request_context.lifespan_context.base_url
-    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.name.startswith('j_'))} }}
-    json = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method="{tool.method}",
-            url=f"{{base_url}}{tool.path}",
-            params=params,
-            json=json,
-        )
-        return response.text"""
-
-                    # Execute the function definition
-                    local_vars = {}
-                    exec(body, globals(), local_vars)
-                    return local_vars[tool.name]
-
-                # Create the tool function and add it to the FastMCP instance
-                tool_function = create_tool_function(tool)
+                fn = create_tool_function_exec(tool)
                 mcp.tool(
                     name=tool.name,
                     description=tool.description,
-                )(tool_function)
+                )(fn)
 
                 logger.info(f"{name} - tool: {tool.name} - {tool.description}")
 
