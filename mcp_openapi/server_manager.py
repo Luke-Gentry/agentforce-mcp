@@ -64,7 +64,6 @@ class ServerManager:
                 ]
             )
 
-        # Add routes for tools endpoints
         self.routes.extend(
             [
                 Route("/tools", get_all_tools),
@@ -97,19 +96,16 @@ class ServerManager:
         logger.info(f"Starting server for {name} ({namespace})")
 
         try:
-            # Load the OpenAPI config
             config = (
                 Config.from_file(url[7:], paths)
                 if url.startswith("file://")
                 else Config.from_url(url, paths)
             )
 
-            # Create the AppContext class
             @dataclass
             class AppContext:
                 base_url: str
 
-            # Create the lifespan manager
             @asynccontextmanager
             async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
                 """Manage application lifecycle with type-safe context"""
@@ -118,7 +114,6 @@ class ServerManager:
                 finally:
                     pass
 
-            # Create the FastMCP instance
             mcp = FastMCP(
                 name,
                 lifespan=app_lifespan,
@@ -130,11 +125,9 @@ class ServerManager:
             tools = tools_from_config(config)
             self.tools[namespace] = tools
 
-            # Create tools for each path
             for tool in tools:
-                # Create the tool function with explicit parameters
+
                 def create_tool_function(tool):
-                    # Build the function signature with explicit parameters
                     params = []
                     for param in tool.parameters:
                         param_str = f"{param.name}: {param.type}"
@@ -147,7 +140,8 @@ class ServerManager:
                             param_str += f" = Field({', '.join(field_parts)})"
                         params.append(param_str)
 
-                    # Create the function body with proper indentation
+                    # Build the function signature with explicit parameters
+                    # We have to use exec() for now to make this work with all the typing we want.
                     body = f"""async def {tool.name}(
                         ctx: Context,
                         {', '.join(params)}
@@ -180,10 +174,8 @@ class ServerManager:
 
                 logger.info(f"{name} - tool: {tool.name} - {tool.description}")
 
-            # Store the server instance
             self.servers[namespace] = mcp
 
-            # Add MCP routes to our routes list
             mcp_app = mcp.sse_app()
             self.routes.extend(mcp_app.routes)
 
@@ -196,9 +188,9 @@ class ServerManager:
         """Stop all running servers."""
         for namespace, server in self.servers.items():
             logger.info(f"Stopping server for {namespace}")
-            # Add any cleanup logic here if needed
+
         self.servers.clear()
-        self.routes = []  # Clear routes when stopping servers
+        self.routes = []
 
     def get_app(self) -> Starlette:
         """Get the Starlette application with all routes."""

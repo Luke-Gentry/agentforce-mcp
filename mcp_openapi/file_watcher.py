@@ -16,7 +16,7 @@ class ConfigFileHandler(FileSystemEventHandler):
     def __init__(self, server_manager: ServerManager, loop: asyncio.AbstractEventLoop):
         self.server_manager = server_manager
         self.last_modified = time.time()
-        self.loop = loop  # Store the event loop
+        self.loop = loop
 
     def on_modified(self, event):
         # Ignore non-yaml files and directory events
@@ -30,7 +30,6 @@ class ConfigFileHandler(FileSystemEventHandler):
         self.last_modified = current_time
 
         logger.info(f"Config file changed: {event.src_path}")
-        # Use the stored event loop to schedule the coroutines
         asyncio.run_coroutine_threadsafe(self._handle_config_change(), self.loop)
 
     async def _handle_config_change(self):

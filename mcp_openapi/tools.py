@@ -74,16 +74,13 @@ class Tool(BaseModel):
 
     @classmethod
     def _to_snake_case(cls, name: str) -> str:
-        # Handle empty string
         if not name:
             return name
 
         result = [name[0].lower()]
 
-        # Iterate through remaining characters
         for char in name[1:]:
             if char.isupper():
-                # Add underscore before uppercase letters
                 result.append("_")
                 result.append(char.lower())
             else:
