@@ -8,14 +8,15 @@ servers:
       - /status
       - /ip
       - /headers
+      - /user-agent
 
   - namespace: zendesk
     name: Zendesk API
     url: file://apis/zendesk-oas.yaml
     base_url: https://api.zendesk.com
     paths:
-      - /api/v2/tickets
-      - /api/v2/users
+      - /api/v2/tickets$
+      - /api/v2/users$
 
   # - namespace: weather
   #   name: OpenWeatherMap API

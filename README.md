@@ -25,18 +25,20 @@ servers:
     url: file://apis/httpbin.yaml
     base_url: https://httpbin.org/
     paths:
-      - /get
+      - /get$
+      - /ip$
+      - /headers$
+      # Will match /status/{code} endpoint
       - /status
-      - /ip
-      - /headers
+
 
   - namespace: zendesk
     name: Zendesk API
     url: file://apis/zendesk-oas.yaml
     base_url: https://api.zendesk.com
     paths:
-      - /api/v2/tickets
-      - /api/v2/users
+      - /api/v2/tickets$
+      - /api/v2/users$
 ```
 
 - You can point to either a remote URL or local file (using `file://`).
