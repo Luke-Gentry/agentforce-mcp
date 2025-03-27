@@ -1,11 +1,13 @@
-from pydantic import BaseModel, Field
+# stdlib
 from typing import Dict, List, Optional, Any
 
+# 3p
 import aiopenapi3
 import pathlib
+from pydantic import BaseModel, Field
 
 """
-Notes:
+
 - Only supporting inline properties, single reference or allOf
 - Not supporting oneOf, anyOf, not
 """

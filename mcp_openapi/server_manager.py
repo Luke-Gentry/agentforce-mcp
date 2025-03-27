@@ -1,16 +1,20 @@
+# stdlib
 import logging
 import sys
 import yaml
 from typing import Dict, AsyncIterator
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
+
+# 3p
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.responses import JSONResponse
 from mcp.server.fastmcp import FastMCP
 
-from mcp_gen.openapi import Config
-from mcp_gen.tools import tools_from_config, Tool
+# project
+from mcp_openapi.parser import Config
+from mcp_openapi.tools import tools_from_config, Tool
 
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401

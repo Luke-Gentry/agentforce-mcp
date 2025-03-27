@@ -1,10 +1,13 @@
+# stdlib
 import logging
 import time
 import asyncio
 
+# 3p
 from watchdog.events import FileSystemEventHandler
 
-from mcp_gen.server_manager import ServerManager
+# project
+from mcp_openapi.server_manager import ServerManager
 
 logger = logging.getLogger(__name__)
 

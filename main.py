@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
+
 import argparse
 import logging
 import os
 import asyncio
 
+# 3p
 from watchdog.observers import Observer
 import uvicorn
 
-from mcp_gen.server_manager import ServerManager
-from mcp_gen.file_watcher import ConfigFileHandler
+# project
+from mcp_openapi.server_manager import ServerManager
+from mcp_openapi.file_watcher import ConfigFileHandler
 
 # Configure logging
 logging.basicConfig(

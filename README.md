@@ -39,11 +39,47 @@ servers:
       - /api/v2/users
 ```
 
-* You can point to either a remote URL or local file (using `file://`).
-* In `paths` you define Regular Expressions which will match the paths you want to expose.
+- You can point to either a remote URL or local file (using `file://`).
+- In `paths` you define Regular Expressions which will match the paths you want to expose.
 
 Then you can run your server to expose it:
 
 ```bash
 uv run main.py
+```
+
+## Inspecting
+
+Alongside the MCP servers, the server exposes a couple HTTP endpoints for diagnoses.
+
+- `/tools/` and `/tools/{namespace}` will show the tools that are exposed.
+
+```bash
+curl -s localhost:8000/tools | jq '.'
+{
+  "httpbin": [
+    {
+      "name": "get_request",
+      "description": "Returns GET data",
+      "parameters": [
+        {
+          "name": "freeform",
+          "type": "str",
+          "default": "None",
+          "description": "Any query parameters you want to test with"
+        }
+      ]
+    },
+    {
+      "name": "get_ip",
+      "description": "Returns origin IP",
+      "parameters": []
+    },
+    {
+      "name": "get_headers",
+      "description": "Returns headers",
+      "parameters": []
+    }
+  ]
+}
 ```

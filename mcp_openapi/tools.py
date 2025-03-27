@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from mcp_gen import openapi
+from mcp_openapi import parser
 
 
 class ToolParameter(BaseModel):
@@ -18,7 +18,7 @@ class Tool(BaseModel):
 
     @classmethod
     def from_operation(
-        cls, path: str, method_name: str, operation: openapi.Operation
+        cls, path: str, method_name: str, operation: parser.Operation
     ) -> "Tool":
         # Ensure array types come first with reversed sorting,
         # so we always pick the array name + type over the regular.
@@ -105,7 +105,7 @@ class Tool(BaseModel):
         return name
 
     @classmethod
-    def _to_python_type(cls, param: openapi.Parameter) -> str:
+    def _to_python_type(cls, param: parser.Parameter) -> str:
         py_type = "str"
         if param.type == "string":
             py_type = "str"
@@ -122,7 +122,7 @@ class Tool(BaseModel):
         return py_type
 
 
-def tools_from_config(config: openapi.Config) -> list[Tool]:
+def tools_from_config(config: parser.Config) -> list[Tool]:
     tools = []
     for path in config.paths:
         for method_name, operation in [
