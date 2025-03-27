@@ -6,7 +6,6 @@ import re
 import sys
 import yaml
 from typing import Dict, List, Set, Any
-from urllib.parse import urlparse
 from mcp_openapi.parser import Config
 
 
