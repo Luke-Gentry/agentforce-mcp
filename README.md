@@ -52,7 +52,7 @@ uv run main.py
 
 ## Inspecting
 
-Alongside the MCP servers, the server exposes a couple HTTP endpoints for diagnoses.
+Alongside the MCP servers, the server exposes a couple HTTP endpoints for inspection.
 
 - `/tools/` and `/tools/{namespace}` will show the tools that are exposed.
 
@@ -101,3 +101,7 @@ Alongside the MCP servers, the server exposes a couple HTTP endpoints for diagno
   ]
 }
 ```
+
+The MCP inspector is also useful for seeing what's available.
+
+![mcp-inspector](images/mcp-inspector-httpbin.png)
