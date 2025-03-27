@@ -13,7 +13,6 @@ from mcp_openapi import parser
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
-import httpx  # noqa: F401
 
 
 class ToolParameter(BaseModel):
@@ -153,15 +152,14 @@ def tools_from_config(config: parser.Config) -> list[Tool]:
 
 def create_tool_function_noexec(tool):
     # Define a template function that will be used as the code template
-    async def template_tool_function(ctx, *args, **kwargs):
+    async def template_tool_function(ctx: Context, *args, **kwargs):
         """Template function whose code will be reused"""
         # Extract base URL from context
         base_url = ctx.request_context.lifespan_context.base_url
 
         # Build params and json data from kwargs
-        # We'll replace this logic at runtime with the actual parameter handling
-        params = {}
-        json = {}
+        params = {k: v for k, v in kwargs.items() if not k.startswith("j_")}
+        json = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
 
         # Make the API request
         async with httpx.AsyncClient() as client:
@@ -173,52 +171,37 @@ def create_tool_function_noexec(tool):
             )
             return response.text
 
-    # Create a real function that processes the specific parameters
-    async def real_implementation(ctx, **kwargs):
-        # Process parameters based on tool definition
-        params = {
-            p.name: kwargs[p.name]
-            for p in tool.parameters
-            if not p.name.startswith("j_") and p.name in kwargs
-        }
-        json_data = {
-            p.name[2:]: kwargs[p.name]
-            for p in tool.parameters
-            if p.name.startswith("j_") and p.name in kwargs
-        }
-
-        # Make the API request
-        base_url = ctx.request_context.lifespan_context.base_url
-        async with httpx.AsyncClient() as client:
-            response = await client.request(
-                method=tool.method,
-                url=f"{base_url}{tool.path}",
-                params=params,
-                json=json_data,
-            )
-            return response.text
-
     # Create parameter objects for the signature
     parameters = [
         inspect.Parameter(
             name="ctx",
-            kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            kind=inspect.Parameter.POSITIONAL_ONLY,
             annotation="Context",  # Use string annotation to avoid ForwardRef issues
         )
     ]
 
-    # Add tool-specific parameters
+    # Add tool-specific parameters with Field types
     for param in tool.parameters:
-        default = inspect.Parameter.empty
-        if hasattr(param, "default") and param.default is not None:
-            default = param.default
+        # Build the Field type string with description and default
+        field_parts = []
+        if param.description:
+            field_parts.append(f'description="{param.description}"')
+        if param.default is not None:
+            field_parts.append(f"default={param.default}")
+        else:
+            field_parts.append("default=None")
+
+        # Create the full type annotation with Field
+        type_annotation = param.type
+        if field_parts:
+            type_annotation = f"Field({', '.join(field_parts)})"
 
         parameters.append(
             inspect.Parameter(
                 name=param.name,
                 kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=param.type,  # Use string type from tool definition
-                default=default,
+                annotation=type_annotation,
+                default=inspect.Parameter.empty,
             )
         )
 
@@ -228,37 +211,14 @@ def create_tool_function_noexec(tool):
     # Clone the code object from the template function
     code = template_tool_function.__code__
 
-    # Create a function with the original code but new name and defaults
-    # This gives us the basic structure, we'll modify more attributes later
-    new_func = types.FunctionType(code, globals(), name=tool.name, argdefs=())
-
-    # Make it an async function by setting the correct flags
-    setattr(
-        new_func,
-        "__code__",
-        types.CodeType(
-            code.co_argcount,
-            code.co_posonlyargcount,
-            code.co_kwonlyargcount,
-            code.co_nlocals,
-            code.co_stacksize,
-            code.co_flags,  # Preserve async flags
-            code.co_code,
-            code.co_consts,
-            code.co_names,
-            code.co_varnames,
-            code.co_filename,
-            tool.name,  # Set function name
-            code.co_firstlineno,
-            code.co_lnotab,
-            code.co_freevars,
-            code.co_cellvars,
-        ),
+    # Create a new function with the same code but new signature
+    wrapper_func = types.FunctionType(
+        code=code,
+        globals=template_tool_function.__globals__,
+        name=tool.name,
+        argdefs=template_tool_function.__defaults__,
+        closure=template_tool_function.__closure__,
     )
-
-    # Create a wrapper that delegates to our real implementation
-    async def wrapper_func(ctx, *args, **kwargs):
-        return await real_implementation(ctx, **kwargs)
 
     # Set function attributes
     wrapper_func.__name__ = tool.name
@@ -267,7 +227,7 @@ def create_tool_function_noexec(tool):
     wrapper_func.__annotations__ = {
         "ctx": "Context",
         "return": dict,
-        **{p.name: p.type for p in tool.parameters},
+        **{p.name: p.annotation for p in parameters[1:]},  # Skip ctx parameter
     }
 
     return wrapper_func
