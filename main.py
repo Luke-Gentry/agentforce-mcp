@@ -51,7 +51,7 @@ async def main():
 
         # Get the Starlette app and run it
         app = server_manager.get_app()
-        config = uvicorn.Config(app, port=args.port, loop=loop)
+        config = uvicorn.Config(app, host="0.0.0.0", port=args.port, loop=loop)
         server = uvicorn.Server(config)
         await server.serve()
     except KeyboardInterrupt:
