@@ -7,7 +7,7 @@ servers:
       - Authorization
     # This is the name as it appears to the LLM
     name: Stripe API
-    url: https://raw.githubusercontent.com/conorbranagan/mcp-openapi/refs/heads/main/test-specs/stripe-customers.yaml
+    url: https://raw.githubusercontent.com/conorbranagan/mcp-openapi/refs/heads/conor/deploy/test-specs/stripe-customers.yaml
     base_url: https://api.stripe.com
     # Select which API paths to expose over MCP
     paths:
