@@ -1,12 +1,27 @@
 # MCP OpenAPI Server
 
-Run an MCP server which creates tools for a subset of API endpoints based on OpenAPI routes.
+A server that exposes multiple OpenAPI endpoints through [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol), allowing hosted AI agents to interact with your APIs in a standardized way.
 
-Supports:
+## What is this?
 
-- JSON and YAML local or remote OpenAPI schemas.
-- Exposing a subset of routes based on regular expressions.
-- Providing strictly typed arguments to tools based on the schemas (supporting both the JSON body and query parameters).
+MCP Server provides a bridge between AI models and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI models to discover and use your APIs with properly typed arguments and responses.
+
+## Key Features
+
+- **Selective Route Exposure**: Expose only specific routes based on regular expressions
+- **Server-Sent Events Transport**: Unlike many existing MCP implementations that use stdio transport, this project leverages SSE for hosted model communication
+  - Each route is available via SSE at `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`)
+- **Type Safety**: Provide strictly typed arguments to tools based on schemas (supporting both JSON body and query parameters)
+- **Multiple Schema Sources**: Support for JSON and YAML OpenAPI schemas from local files or remote URLs
+- **Multi-User Support**: Share the same MCP tools across multiple users with standard HTTP authentication
+
+## Why SSE Transport?
+
+While many MCP implementations rely on stdio (Standard Input/Output) for local integrations and command-line tools, this project focuses on SSE transport to enable:
+
+- **Hosted Model Support**: Seamless integration with remotely hosted AI agents
+- **Simplified Deployment**: Easier to deploy and scale in cloud environments
+- **Multi-Tenant Architecture**: Support for multiple users through standard HTTP authentication headers
 
 ## Quick Start
 
