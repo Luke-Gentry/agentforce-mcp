@@ -356,6 +356,71 @@ def weather_api_spec():
     }
 
 
+@pytest.fixture
+def form_encoded_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Form API", "version": "1.0.0"},
+        "paths": {
+            "/v1/customers": {
+                "post": {
+                    "operationId": "createCustomer",
+                    "summary": "Create a customer",
+                    "requestBody": {
+                        "content": {
+                            "application/x-www-form-urlencoded": {
+                                "encoding": {
+                                    "address": {"explode": True, "style": "deepObject"},
+                                    "metadata": {
+                                        "explode": True,
+                                        "style": "deepObject",
+                                    },
+                                },
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string", "maxLength": 256},
+                                        "email": {"type": "string", "maxLength": 512},
+                                        "address": {
+                                            "type": "object",
+                                            "properties": {
+                                                "line1": {"type": "string"},
+                                                "city": {"type": "string"},
+                                                "country": {"type": "string"},
+                                            },
+                                        },
+                                        "metadata": {
+                                            "type": "object",
+                                            "additionalProperties": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            }
+                        },
+                        "required": True,
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "name": {"type": "string"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     # Create a temporary OpenAPI spec file
     spec_file = tmp_path / "openapi.json"
@@ -525,12 +590,12 @@ def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
     assert len(get_op.parameters) == 2
     date_param = next(p for p in get_op.parameters if p.name == "date")
     assert date_param.in_ == "query"
-    assert date_param.required is False
+    assert date_param.required is True
     assert date_param.type == "string"
 
     hd_param = next(p for p in get_op.parameters if p.name == "hd")
     assert hd_param.in_ == "query"
-    assert hd_param.required is False
+    assert hd_param.required is True
     assert hd_param.type == "boolean"
 
     # Validate responses
@@ -571,3 +636,56 @@ def test_parameter_enums_and_defaults(tmp_path, weather_api_spec):
     assert time_param.type == "string"
     assert time_param.enum == ["iso8601", "unixtime"]
     assert time_param.default == "iso8601"
+
+
+def test_form_encoded_request_body(tmp_path, form_encoded_spec):
+    spec_file = tmp_path / "form_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(form_encoded_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/v1/customers"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test POST operation
+    post_op = path.post
+    assert post_op.id == "createCustomer"
+    assert post_op.request_body_.required is True
+
+    # Test request body schema
+    request_schema = post_op.request_body_.schema_
+    assert len(request_schema.properties) == 4
+    assert {p.name for p in request_schema.properties} == {
+        "name",
+        "email",
+        "address",
+        "metadata",
+    }
+
+    # Test encoding properties
+    encoding = post_op.request_body_.encoding
+    assert encoding is not None
+    assert "address" in encoding
+    assert "metadata" in encoding
+    assert encoding["address"]["explode"] is True
+    assert encoding["address"]["style"] == "deepObject"
+    assert encoding["metadata"]["explode"] is True
+    assert encoding["metadata"]["style"] == "deepObject"
+
+    # Test nested schema properties
+    address_prop = next(p for p in request_schema.properties if p.name == "address")
+    assert address_prop.type == "object"
+    assert len(address_prop.properties) == 3
+    assert {p.name for p in address_prop.properties} == {"line1", "city", "country"}
+
+    # Test metadata property
+    metadata_prop = next(p for p in request_schema.properties if p.name == "metadata")
+    assert metadata_prop.type == "object"
+    assert metadata_prop.properties == []  # additionalProperties case
+
+    # Test response schema
+    response = post_op.responses["200"]
+    assert response.format == "application/json"
+    response_schema = response.schema_
+    assert len(response_schema.properties) == 2
+    assert {p.name for p in response_schema.properties} == {"id", "name"}

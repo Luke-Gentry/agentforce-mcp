@@ -81,8 +81,10 @@ class MCPProxy:
             params = forwarded_params
 
         # Filter out None values from params and json_body
-        params = {k: v for k, v in params.items() if v is not None}
-        json_body = {k: v for k, v in json_body.items() if v is not None}
+        if params:
+            params = {k: v for k, v in params.items() if v is not None}
+        if json_body:
+            json_body = {k: v for k, v in json_body.items() if v is not None}
 
         # Create a unique filename for this request
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -173,19 +173,34 @@ def test_tool_parameter_conversion():
         description="A test tool",
         parameters=[
             ToolParameter(
-                name="string_param", type="str", description="String parameter"
+                name="string_param",
+                type="str",
+                description="String parameter",
+                default="None",
             ),
             ToolParameter(
-                name="int_param", type="int", description="Integer parameter"
+                name="int_param",
+                type="int",
+                description="Integer parameter",
+                default="None",
             ),
             ToolParameter(
-                name="float_param", type="float", description="Float parameter"
+                name="float_param",
+                type="float",
+                description="Float parameter",
+                default="None",
             ),
             ToolParameter(
-                name="bool_param", type="bool", description="Boolean parameter"
+                name="bool_param",
+                type="bool",
+                description="Boolean parameter",
+                default="None",
             ),
             ToolParameter(
-                name="array_param", type="list[str]", description="Array parameter"
+                name="array_param",
+                type="list[str]",
+                description="Array parameter",
+                default="None",
             ),
         ],
         method="GET",

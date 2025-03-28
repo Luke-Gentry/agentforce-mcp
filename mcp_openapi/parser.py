@@ -64,6 +64,7 @@ class RequestBody(BaseModel):
     content: Optional[Dict[str, Any]] = None
     required: bool = False
     schema_: Optional[Schema] = Field(default=None)
+    encoding: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 class Operation(BaseModel):
@@ -239,7 +240,7 @@ class Config:
                             nested_schema,
                         ) in prop_schema.properties.items():
                             nested_prop = SchemaProperty(
-                                name=nested_name, type=nested_schema.type
+                                name=nested_name, type=nested_schema.type or "object"
                             )
                             if nested_schema.type == "object":
                                 nested_schema_result = cls._process_schema(
@@ -250,6 +251,7 @@ class Config:
                                         nested_schema_result.properties
                                     )
                             nested_properties.append(nested_prop)
+                        prop.properties = nested_properties
 
                 properties.append(prop)
         elif resolved_schema.type == "array":
@@ -318,7 +320,34 @@ class Config:
         request_body = None
         if operation.requestBody:
             schema = None
+            encoding = None
+            content_type = None
+
+            # Handle form-encoded content
             if (
+                operation.requestBody.content
+                and "application/x-www-form-urlencoded" in operation.requestBody.content
+            ):
+                content = operation.requestBody.content[
+                    "application/x-www-form-urlencoded"
+                ]
+                if hasattr(content, "schema_"):
+                    schema = cls._process_schema(content.schema_, api)
+                if hasattr(content, "encoding"):
+                    # Convert encoding object to dictionary
+                    encoding = {}
+                    for field_name, encoding_obj in content.encoding.items():
+                        encoding[field_name] = {
+                            "explode": getattr(encoding_obj, "explode", None),
+                            "style": getattr(encoding_obj, "style", None),
+                            "allowReserved": getattr(
+                                encoding_obj, "allowReserved", None
+                            ),
+                            "contentType": getattr(encoding_obj, "contentType", None),
+                        }
+                content_type = "application/x-www-form-urlencoded"
+            # Handle JSON content
+            elif (
                 operation.requestBody.content
                 and "application/json" in operation.requestBody.content
             ):
@@ -326,12 +355,14 @@ class Config:
                     "application/json"
                 ].schema_
                 schema = cls._process_schema(content_schema, api)
+                content_type = "application/json"
 
             request_body = RequestBody(
                 description=getattr(operation.requestBody, "description", None),
-                content=getattr(operation.requestBody, "content", None),
+                content=operation.requestBody.content,
                 required=bool(getattr(operation.requestBody, "required", False)),
                 schema_=schema,
+                encoding=encoding,
             )
 
         return Operation(
