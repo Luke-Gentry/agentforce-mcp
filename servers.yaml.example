@@ -31,11 +31,9 @@ servers:
   #     - /api/v2/users$
 
   - namespace: weather
-    name: OpenWeatherMap API
-    url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
-    base_url: https://api.openweathermap.org/data/2.5
+    name: Open Meteo API
+    url: https://raw.githubusercontent.com/open-meteo/open-meteo/refs/heads/main/openapi.yml
+    base_url: https://api.open-meteo.com
     # Forward the API key from the client's query parameters
-    query_params:
-      - appid
     paths:
-      - /data/2.5/weather
+      - /v1/forecast$

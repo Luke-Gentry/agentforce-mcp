@@ -48,6 +48,8 @@ class Parameter(BaseModel):
     explode: Optional[bool] = None
     allowReserved: Optional[bool] = None
     type: Optional[str] = None
+    enum: Optional[List[Any]] = None
+    default: Optional[Any] = None
 
 
 class Response(BaseModel):
@@ -285,8 +287,15 @@ class Config:
                 "explode": getattr(param, "explode", None),
                 "allowReserved": getattr(param, "allowReserved", None),
                 "type": param.schema_.type,
-                # TODO: Need to handle other types?
             }
+
+            # Add enum and default if they exist in the schema
+            if hasattr(param.schema_, "enum"):
+                param_dict["enum"] = param.schema_.enum
+                param_dict["required"] = True
+            if hasattr(param.schema_, "default"):
+                param_dict["default"] = param.schema_.default
+
             processed_params.append(Parameter(**param_dict))
 
         processed_responses = {}

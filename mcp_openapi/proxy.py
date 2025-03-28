@@ -10,7 +10,7 @@ from dataclasses import dataclass
 # 3p
 import httpx
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,17 +80,21 @@ class MCPProxy:
             }
             params = forwarded_params
 
+        # Filter out None values from params and json_body
+        params = {k: v for k, v in params.items() if v is not None}
+        json_body = {k: v for k, v in json_body.items() if v is not None}
+
         # Create a unique filename for this request
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}_{method.lower()}_{Path(url).name}.json"
         cassette_path = self.cassette_dir / filename
 
         # Log the request
-        logger.info(f"Making {method} request to {url}")
+        log.info(f"Making {method} request to {url}")
         if params:
-            logger.debug(f"Query parameters: {params}")
+            log.debug(f"Query parameters: {params}")
         if json_body:
-            logger.debug(f"Request body: {json_body}")
+            log.debug(f"Request body: {json_body}")
 
         # Make the actual request using the provided client builder
         client = self.client_builder()
@@ -126,6 +130,6 @@ class MCPProxy:
             with open(cassette_path, "w") as f:
                 json.dump(cassette_data, f, indent=2)
 
-            logger.info(f"Request recorded to {cassette_path}")
+            log.info(f"Request recorded to {cassette_path}")
 
         return response

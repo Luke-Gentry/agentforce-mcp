@@ -292,6 +292,70 @@ def nasa_apod_spec():
     }
 
 
+@pytest.fixture
+def weather_api_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Weather API", "version": "1.0.0"},
+        "paths": {
+            "/v1/forecast": {
+                "get": {
+                    "operationId": "getForecast",
+                    "summary": "Get weather forecast",
+                    "parameters": [
+                        {
+                            "name": "temperature_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "celsius",
+                                "enum": ["celsius", "fahrenheit"],
+                            },
+                            "description": "Temperature unit",
+                        },
+                        {
+                            "name": "wind_speed_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "kmh",
+                                "enum": ["kmh", "ms", "mph", "kn"],
+                            },
+                            "description": "Wind speed unit",
+                        },
+                        {
+                            "name": "timeformat",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "iso8601",
+                                "enum": ["iso8601", "unixtime"],
+                            },
+                            "description": "Time format",
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "temperature": {"type": "number"},
+                                            "wind_speed": {"type": "number"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     # Create a temporary OpenAPI spec file
     spec_file = tmp_path / "openapi.json"
@@ -475,3 +539,35 @@ def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
     success_response = get_op.responses["200"]
     assert success_response.format == "application/json"
     assert success_response.description == "successful operation"
+
+
+def test_parameter_enums_and_defaults(tmp_path, weather_api_spec):
+    spec_file = tmp_path / "weather_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(weather_api_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/v1/forecast"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test GET operation parameters
+    get_op = path.get
+    assert len(get_op.parameters) == 3
+
+    # Test temperature_unit parameter
+    temp_param = next(p for p in get_op.parameters if p.name == "temperature_unit")
+    assert temp_param.type == "string"
+    assert temp_param.enum == ["celsius", "fahrenheit"]
+    assert temp_param.default == "celsius"
+
+    # Test wind_speed_unit parameter
+    wind_param = next(p for p in get_op.parameters if p.name == "wind_speed_unit")
+    assert wind_param.type == "string"
+    assert wind_param.enum == ["kmh", "ms", "mph", "kn"]
+    assert wind_param.default == "kmh"
+
+    # Test timeformat parameter
+    time_param = next(p for p in get_op.parameters if p.name == "timeformat")
+    assert time_param.type == "string"
+    assert time_param.enum == ["iso8601", "unixtime"]
+    assert time_param.default == "iso8601"

@@ -1,6 +1,8 @@
 # stdlib
 import inspect
 import types
+import re
+from typing import Any
 
 # 3p
 from pydantic import BaseModel
@@ -12,11 +14,14 @@ from mcp_openapi import parser
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
 
+# Maximum number of characters to include in enum descriptions
+MAX_ENUM_DESCRIPTION_LENGTH = 100
+
 
 class ToolParameter(BaseModel):
     name: str
     type: str
-    default: str | None = None
+    default: Any
     description: str | None = None
 
 
@@ -41,12 +46,23 @@ class Tool(BaseModel):
             if dedup_name in seen_params:
                 continue
 
+            # Build description with enum values if present
+            description = param.description.strip() if param.description else ""
+            if param.enum:
+                enum_desc = f" Options: {', '.join(str(e) for e in param.enum)}"
+                if len(enum_desc) > MAX_ENUM_DESCRIPTION_LENGTH:
+                    # Truncate to fit within max length
+                    enum_desc = (
+                        f" Options: {', '.join(str(e) for e in param.enum[:2])}..."
+                    )
+                description = f"{description}{enum_desc}".strip()
+
             tool_params.append(
                 ToolParameter(
                     name=cls._to_python_arg(param.name),
                     type=cls._to_python_type(param),
-                    description=param.description.strip(),
-                    default="None" if not param.required else None,
+                    description=description,
+                    default=param.default,
                 )
             )
             seen_params.add(dedup_name)
@@ -76,7 +92,7 @@ class Tool(BaseModel):
                     )
 
         return cls(
-            name=cls._to_snake_case(operation.id),
+            name=cls._to_fn_name(operation.id),
             description=operation.summary,
             parameters=tool_params,
             method=method_name,
@@ -104,6 +120,15 @@ class Tool(BaseModel):
         name = cls._to_snake_case(name)
         if name.endswith("[]"):
             name = name[:-2]
+        return name
+
+    @classmethod
+    def _to_fn_name(cls, name: str) -> str:
+        name = cls._to_snake_case(name)
+        # replace invalid characters for a function name with a regex
+        name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        if name.startswith("_"):
+            name = name[1:]
         return name
 
     @classmethod
@@ -236,13 +261,15 @@ def create_tool_function_exec(tool):
     params = []
     for param in tool.parameters:
         param_str = f"{param.name}: {param.type}"
-        if param.description or param.default:
-            field_parts = []
-            if param.description:
-                field_parts.append(f'description="{param.description}"')
-            if param.default:
-                field_parts.append(f"default={param.default}")
-            param_str += f" = Field({', '.join(field_parts)})"
+        field_parts = []
+        if param.description:
+            field_parts.append(f'description="{param.description}"')
+        # Quote string defaults
+        default_value = (
+            f'"{param.default}"' if isinstance(param.default, str) else param.default
+        )
+        field_parts.append(f"default={default_value}")
+        param_str += f" = Field({', '.join(field_parts)})"
         params.append(param_str)
 
     # Build the function signature with explicit parameters

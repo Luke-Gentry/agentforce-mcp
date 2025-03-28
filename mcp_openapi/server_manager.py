@@ -22,7 +22,7 @@ from mcp_openapi.tools import (
 from mcp_openapi.proxy import MCPProxy, ProxySettings
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class ServerManager:
@@ -77,7 +77,7 @@ class ServerManager:
             with open(self.config_path, "r") as f:
                 self.config = yaml.safe_load(f)
         except Exception as e:
-            logger.error(f"Failed to load config file {self.config_path}: {e}")
+            log.error(f"Failed to load config file {self.config_path}: {e}")
             sys.exit(1)
 
     async def start_servers(self):
@@ -99,7 +99,7 @@ class ServerManager:
             forward_query_params=server_config.get("query_params", []),
         )
 
-        logger.info(f"Starting server for {name} ({namespace})")
+        log.info(f"Starting server for {name} ({namespace})")
 
         try:
             config = (
@@ -143,22 +143,22 @@ class ServerManager:
                     description=tool.description,
                 )(fn)
 
-                logger.info(f"{name} - tool: {tool.name} - {tool.description}")
+                log.info(f"{name} - tool: {tool.name} - {tool.description}")
 
             self.servers[namespace] = mcp
 
             mcp_app = mcp.sse_app()
             self.routes.extend(mcp_app.routes)
 
-            logger.info(f"Started server for {name} ({namespace})")
+            log.info(f"Started server for {name} at /{namespace}/sse")
 
         except Exception as e:
-            logger.exception(f"Failed to start server for {name}: {e}")
+            log.exception(f"Failed to start server for {name}: {e}")
 
     async def stop_servers(self):
         """Stop all running servers."""
         for namespace, server in self.servers.items():
-            logger.info(f"Stopping server for {namespace}")
+            log.info(f"Stopping server for {namespace}")
 
         self.servers.clear()
         self.routes = []
