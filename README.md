@@ -16,8 +16,6 @@ Install the necessary dependencies using [uv](https://github.com/astral-sh/uv).
 uv sync
 ```
 
-_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described belowc_
-
 Define your servers following the structure of `services.yaml.example`:
 
 ```
@@ -49,15 +47,17 @@ servers:
 - You can point to either a remote URL or local file (using `file://`).
 - In `paths` you define Regular Expressions which will match the paths you want to expose.
 
-Then you can run your server to expose it:
+_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below_
+
+Then you can run your server:
 
 ```bash
 uv run main.py
 ```
 
-## Scripts
+Or see [Deployment](#deployment) below for running in Docker
 
-The project includes utility scripts to help with OpenAPI and MCP server management:
+## Scripts
 
 ### `slim-openapi`
 
