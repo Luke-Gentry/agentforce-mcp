@@ -51,38 +51,16 @@ _⚠️ Note: For large OpenAPI specs you might find the initial cold start slow
 
 Then you can run your server:
 
+**Manually**
+
 ```bash
 uv run main.py
 ```
 
-Or see [Deployment](#deployment) below for running in Docker
-
-## Scripts
-
-### `slim-openapi`
-
-Reduces large OpenAPI specifications to only include specified routes and their dependencies. This is particularly useful for handling large specs like Stripe or Zendesk, where you only need a subset of the API.
-
-```bash
-uv run scripts/slim-openapi \
-    -u https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml \
-    --routes "/v1/customers$" \
-    -o stripe-slim.yaml
-```
-
-## Deployment
-
-The service can be deployed using Docker. First, ensure you have a `servers.yaml` file configured with your desired API endpoints (see the Quick Start section for an example).
-
-### Building the Docker Image
+**Via Docker**
 
 ```bash
 docker build -t mcp-openapi .
-```
-
-### Running the Container
-
-```bash
 docker run -p 8000:8000 -v $(pwd)/servers.yaml:/app/servers.yaml mcp-openapi
 ```
 
@@ -101,28 +79,15 @@ docker run -p 8000:8000 \
   mcp-openapi
 ```
 
-### Docker Compose
+## Slimming down specs with `slim-openapi`
 
-You can also use Docker Compose for easier deployment. Create a `docker-compose.yml` file:
-
-```yaml
-version: "3.8"
-services:
-  mcp-openapi:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./servers.yaml:/app/servers.yaml
-    environment:
-      - PORT=8000
-      - CONFIG=servers.yaml
-```
-
-Then run:
+For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. Some SaaS tools (e.g. Stripe, Zendesk) have multi-megabyte spec YAML files which are processed somewhat inefficiently today. Using the `slim-openapi` tool you can shorten these to just the spec needed for your routes. All references will be resolved appropriately so it can still parse.
 
 ```bash
-docker-compose up
+uv run scripts/slim-openapi \
+    -u https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml \
+    --routes "/v1/customers$" \
+    -o stripe-slim.yaml
 ```
 
 ## Inspecting
