@@ -16,7 +16,7 @@ Install the necessary dependencies using [uv](https://github.com/astral-sh/uv).
 uv sync
 ```
 
-_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below_
+_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described belowc_
 
 Define your servers following the structure of `services.yaml.example`:
 
@@ -57,31 +57,7 @@ uv run main.py
 
 ## Scripts
 
-The project includes several utility scripts to help with OpenAPI and MCP server management:
-
-### `make-mcp`
-
-Generates one-off MCP servers from OpenAPI specifications. This is useful when you want to create standalone MCP servers rather than having them generated dynamically.
-
-**Create for HTTPBin /get**
-
-```bash
-uv run scripts/make-mcp -f test-specs/httpbin.yaml \
-    -n "HTTPBin.org" \
-    -r httpbin \
-    -b https://httpbin.org/ \
-    --routes /get --routes /ip
-```
-
-**Create for NASA Picture of the Day**
-
-```bash
-uv run scripts/make-mcp \
-    -u https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/nasa.gov/apod/1.0.0/openapi.yaml \
-    -n "NASA Astronomy Picture of the Day" \
-    -r nasapod -b https://api.nasa.gov/planetary \
-    --routes /apod
-```
+The project includes utility scripts to help with OpenAPI and MCP server management:
 
 ### `slim-openapi`
 
