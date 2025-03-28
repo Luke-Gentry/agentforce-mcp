@@ -3,13 +3,22 @@ import logging
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional, Callable, List
 from starlette.requests import Request
+from dataclasses import dataclass
 
 # 3p
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProxySettings:
+    """Settings for how to proxy requests."""
+
+    forward_headers: Optional[List[str]] = None
+    forward_query_params: Optional[List[str]] = None
 
 
 class MCPProxy:
@@ -18,7 +27,7 @@ class MCPProxy:
     def __init__(
         self,
         cassette_dir: str = "cassettes",
-        forward_headers: Optional[Dict[str, Any]] = None,
+        settings: Optional[ProxySettings] = None,
         client_builder: Optional[Callable[[], httpx.AsyncClient]] = None,
         record: bool = False,
     ):
@@ -26,12 +35,12 @@ class MCPProxy:
 
         Args:
             cassette_dir: Directory where request/response cassettes will be stored
-            forward_headers: Headers to forward from the incoming request
+            settings: ProxySettings object containing forwarding configuration
             client_builder: Function that returns an AsyncClient. Defaults to creating a new httpx.AsyncClient
         """
         self.cassette_dir = Path(cassette_dir)
         self.cassette_dir.mkdir(parents=True, exist_ok=True)
-        self.forward_headers = forward_headers
+        self.settings = settings or ProxySettings()
         self.client_builder = client_builder or (lambda: httpx.AsyncClient())
         self.record = record
 
@@ -57,10 +66,19 @@ class MCPProxy:
         """
         # Pass along any headers that were set in the server config
         request_headers = {}
-        if self.forward_headers:
-            for header in self.forward_headers:
+        if self.settings.forward_headers:
+            for header in self.settings.forward_headers:
                 if header in request.headers:
                     request_headers[header] = request.headers[header]
+
+        # Forward specified query parameters
+        if self.settings.forward_query_params and params:
+            forwarded_params = {
+                k: v
+                for k, v in params.items()
+                if k in self.settings.forward_query_params
+            }
+            params = forwarded_params
 
         # Create a unique filename for this request
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

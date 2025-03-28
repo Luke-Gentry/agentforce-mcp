@@ -1,13 +1,13 @@
 servers:
   - namespace: stripe
-    # Define headers to forward to the server
+    # Define headers to forward to the API
     headers:
       - Authorization
-    # This is the name as it appears to the LLM
     name: Stripe API
     url: https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml
     base_url: https://api.stripe.com
-    # Select which API paths to expose over MCP
+    # Select which API paths to expose over MCP. Each matching path will become a tool with arguments
+    # from the query parameters or the JSON body.
     paths:
       - /v1/customers$
 
@@ -30,9 +30,12 @@ servers:
   #     - /api/v2/tickets$
   #     - /api/v2/users$
 
-  # - namespace: weather
-  #   name: OpenWeatherMap API
-  #   url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
-  #   base_url: https://api.openweathermap.org/data/2.5
-  #   paths:
-  #     - /data/2.5/weather
+  - namespace: weather
+    name: OpenWeatherMap API
+    url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
+    base_url: https://api.openweathermap.org/data/2.5
+    # Forward the API key from the client's query parameters
+    query_params:
+      - appid
+    paths:
+      - /data/2.5/weather
