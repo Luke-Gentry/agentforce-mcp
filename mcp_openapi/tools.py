@@ -73,24 +73,33 @@ class Tool(BaseModel):
             for param in operation.request_body_.schema_.properties:
                 if param.properties:
                     for nested_param in param.properties:
+                        name = cls._to_python_arg(f"j_{nested_param.name}")
+                        if name in seen_params:
+                            continue
+
                         tool_params.append(
                             ToolParameter(
-                                name=cls._to_python_arg(f"j_{nested_param.name}"),
+                                name=name,
                                 type=cls._to_python_type(nested_param),
-                                description="",
+                                description=nested_param.description,
                                 default="None",
                             )
                         )
+                        seen_params.add(name)
                 else:
+                    name = cls._to_python_arg(f"j_{param.name}")
+                    if name in seen_params:
+                        continue
+
                     tool_params.append(
                         ToolParameter(
-                            name=cls._to_python_arg(f"j_{param.name}"),
+                            name=name,
                             type=cls._to_python_type(param),
-                            description="",
+                            description=param.description,
                             default="None",
                         )
                     )
-
+                    seen_params.add(name)
         return cls(
             name=cls._to_fn_name(operation.id),
             description=operation.summary,

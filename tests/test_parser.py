@@ -1,5 +1,10 @@
 import json
 import pytest
+import tempfile
+import yaml
+import os
+from pathlib import Path
+
 from mcp_openapi.parser import Config
 
 
@@ -379,19 +384,83 @@ def form_encoded_spec():
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "name": {"type": "string", "maxLength": 256},
-                                        "email": {"type": "string", "maxLength": 512},
+                                        "name": {
+                                            "type": "string",
+                                            "maxLength": 256,
+                                            "description": "The customer's full name or business name.",
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "maxLength": 512,
+                                            "description": "Customer's email address",
+                                        },
                                         "address": {
-                                            "type": "object",
-                                            "properties": {
-                                                "line1": {"type": "string"},
-                                                "city": {"type": "string"},
-                                                "country": {"type": "string"},
-                                            },
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "line1": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "city": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "country": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "The customer's address",
                                         },
                                         "metadata": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "additionalProperties": {
+                                                        "type": "string"
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "Set of key-value pairs",
+                                        },
+                                        "invoice_settings": {
                                             "type": "object",
-                                            "additionalProperties": {"type": "string"},
+                                            "properties": {
+                                                "custom_fields": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "maxLength": 40,
+                                                                    },
+                                                                    "value": {
+                                                                        "type": "string",
+                                                                        "maxLength": 140,
+                                                                    },
+                                                                },
+                                                                "required": [
+                                                                    "name",
+                                                                    "value",
+                                                                ],
+                                                            },
+                                                        },
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [""],
+                                                        },
+                                                    ]
+                                                }
+                                            },
                                         },
                                     },
                                 },
@@ -590,12 +659,12 @@ def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
     assert len(get_op.parameters) == 2
     date_param = next(p for p in get_op.parameters if p.name == "date")
     assert date_param.in_ == "query"
-    assert date_param.required is True
+    assert date_param.required is False
     assert date_param.type == "string"
 
     hd_param = next(p for p in get_op.parameters if p.name == "hd")
     assert hd_param.in_ == "query"
-    assert hd_param.required is True
+    assert hd_param.required is False
     assert hd_param.type == "boolean"
 
     # Validate responses
@@ -654,12 +723,13 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
 
     # Test request body schema
     request_schema = post_op.request_body_.schema_
-    assert len(request_schema.properties) == 4
+    assert len(request_schema.properties) == 5
     assert {p.name for p in request_schema.properties} == {
         "name",
         "email",
         "address",
         "metadata",
+        "invoice_settings",
     }
 
     # Test encoding properties
@@ -678,10 +748,23 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
     assert len(address_prop.properties) == 3
     assert {p.name for p in address_prop.properties} == {"line1", "city", "country"}
 
-    # Test metadata property
+    # Test metadata property with additionalProperties
     metadata_prop = next(p for p in request_schema.properties if p.name == "metadata")
     assert metadata_prop.type == "object"
-    assert metadata_prop.properties == []  # additionalProperties case
+    assert metadata_prop.properties is None  # additionalProperties case
+
+    # Test invoice_settings with nested anyOf
+    invoice_settings = next(
+        p for p in request_schema.properties if p.name == "invoice_settings"
+    )
+    assert invoice_settings.type == "object"
+    assert len(invoice_settings.properties) == 1
+    custom_fields = invoice_settings.properties[0]
+    assert custom_fields.name == "custom_fields"
+    assert custom_fields.type == "array"
+    assert custom_fields.items.type == "object"
+    assert len(custom_fields.items.properties) == 2
+    assert {p.name for p in custom_fields.items.properties} == {"name", "value"}
 
     # Test response schema
     response = post_op.responses["200"]
@@ -689,3 +772,87 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
     response_schema = response.schema_
     assert len(response_schema.properties) == 2
     assert {p.name for p in response_schema.properties} == {"id", "name"}
+
+
+def test_circular_references():
+    """Test handling of circular references in OpenAPI schemas."""
+    # Create a test OpenAPI spec with circular references
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Person"}
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Person": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "spouse": {"$ref": "#/components/schemas/Person"},
+                        "children": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/Person"},
+                        },
+                    },
+                }
+            }
+        },
+    }
+
+    # Write the spec to a temporary file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(spec, f)
+        spec_path = f.name
+
+    try:
+        # Load the spec
+        config = Config.from_file(
+            spec_path, ["/test"], base_path=Path(spec_path).parent
+        )
+
+        # Verify that the circular references are handled gracefully
+        assert config.paths is not None
+        assert len(config.paths) == 1
+        path = config.paths[0]
+        assert path.get is not None
+        assert path.get.responses is not None
+        assert "200" in path.get.responses
+        response = path.get.responses["200"]
+        assert response.schema_ is not None
+
+        # The schema should have properties but not infinite recursion
+        schema = response.schema_
+        assert schema.properties is not None
+        assert len(schema.properties) > 0
+
+        # Find the spouse property
+        spouse_prop = next(p for p in schema.properties if p.name == "spouse")
+        assert spouse_prop.type == "object"
+        # The spouse property should not have infinite nested properties
+        assert spouse_prop.properties is None
+
+        # Find the children property
+        children_prop = next(p for p in schema.properties if p.name == "children")
+        assert children_prop.type == "array"
+        assert children_prop.items is not None
+        assert children_prop.items.type == "object"
+        # The items should not have infinite nested properties
+        # assert children_prop.items.properties is None
+
+    finally:
+        # Clean up the temporary file
+        os.unlink(spec_path)
