@@ -490,6 +490,109 @@ def form_encoded_spec():
     }
 
 
+@pytest.fixture
+def anyof_allof_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test": {
+                "post": {
+                    "operationId": "testEndpoint",
+                    "summary": "Test endpoint with anyOf and allOf",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "any_of_field": {
+                                            "anyOf": [
+                                                {"type": "string"},
+                                                {"type": "integer"},
+                                                {"type": "number"},
+                                                {"type": "boolean"},
+                                            ],
+                                            "description": "Field that can be multiple types",
+                                        },
+                                        "all_of_field": {
+                                            "allOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "name": {"type": "string"},
+                                                        "age": {"type": "integer"},
+                                                    },
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "email": {"type": "string"},
+                                                        "active": {"type": "boolean"},
+                                                    },
+                                                },
+                                            ],
+                                            "description": "Field that must satisfy all schemas",
+                                        },
+                                        "nested_any_of": {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "active",
+                                                                "inactive",
+                                                            ],
+                                                        },
+                                                        {
+                                                            "type": "integer",
+                                                            "enum": [1, 0],
+                                                        },
+                                                    ]
+                                                }
+                                            },
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "allOf": [
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "string"},
+                                                    "created_at": {"type": "string"},
+                                                },
+                                            },
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "status": {"type": "string"},
+                                                    "type": {"type": "string"},
+                                                },
+                                            },
+                                        ]
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     # Create a temporary OpenAPI spec file
     spec_file = tmp_path / "openapi.json"
@@ -744,14 +847,17 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
 
     # Test nested schema properties
     address_prop = next(p for p in request_schema.properties if p.name == "address")
-    assert address_prop.type == "object"
-    assert len(address_prop.properties) == 3
-    assert {p.name for p in address_prop.properties} == {"line1", "city", "country"}
+    assert address_prop.type == ["object", "string"]  # anyOf types
+    assert address_prop.any_of is not None
+    assert len(address_prop.any_of) == 2
+    assert address_prop.any_of[0].type == "object"
+    assert address_prop.any_of[1].type == "string"
 
     # Test metadata property with additionalProperties
     metadata_prop = next(p for p in request_schema.properties if p.name == "metadata")
-    assert metadata_prop.type == "object"
-    assert metadata_prop.properties is None  # additionalProperties case
+    assert metadata_prop.type == ["object", "string"]  # anyOf types
+    assert metadata_prop.any_of is not None
+    assert len(metadata_prop.any_of) == 2
 
     # Test invoice_settings with nested anyOf
     invoice_settings = next(
@@ -761,10 +867,11 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
     assert len(invoice_settings.properties) == 1
     custom_fields = invoice_settings.properties[0]
     assert custom_fields.name == "custom_fields"
-    assert custom_fields.type == "array"
-    assert custom_fields.items.type == "object"
-    assert len(custom_fields.items.properties) == 2
-    assert {p.name for p in custom_fields.items.properties} == {"name", "value"}
+    assert custom_fields.type == ["array", "string"]  # anyOf types
+    assert custom_fields.any_of is not None
+    assert len(custom_fields.any_of) == 2
+    assert custom_fields.any_of[0].type == "array"
+    assert custom_fields.any_of[1].type == "string"
 
     # Test response schema
     response = post_op.responses["200"]
@@ -856,3 +963,83 @@ def test_circular_references():
     finally:
         # Clean up the temporary file
         os.unlink(spec_path)
+
+
+def test_anyof_allof_schemas(tmp_path, anyof_allof_spec):
+    spec_file = tmp_path / "anyof_allof_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(anyof_allof_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/test"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test POST operation
+    post_op = path.post
+    assert post_op.id == "testEndpoint"
+    assert post_op.request_body_.required is True
+
+    # Test request body schema
+    request_schema = post_op.request_body_.schema_
+    assert len(request_schema.properties) == 3
+    assert {p.name for p in request_schema.properties} == {
+        "any_of_field",
+        "all_of_field",
+        "nested_any_of",
+    }
+
+    # Test anyOf field
+    any_of_field = next(
+        p for p in request_schema.properties if p.name == "any_of_field"
+    )
+    assert any_of_field.type == ["string", "integer", "number", "boolean"]
+    assert any_of_field.any_of is not None
+    assert len(any_of_field.any_of) == 4
+    assert any_of_field.description == "Field that can be multiple types"
+
+    # Test allOf field
+    all_of_field = next(
+        p for p in request_schema.properties if p.name == "all_of_field"
+    )
+    assert all_of_field.type == "object"
+    assert all_of_field.all_of is not None
+    assert len(all_of_field.all_of) == 2
+    assert all_of_field.description == "Field that must satisfy all schemas"
+
+    # Verify merged properties from allOf
+    assert len(all_of_field.properties) == 4
+    assert {p.name for p in all_of_field.properties} == {
+        "name",
+        "age",
+        "email",
+        "active",
+    }
+
+    # Test nested anyOf
+    nested_any_of = next(
+        p for p in request_schema.properties if p.name == "nested_any_of"
+    )
+    assert nested_any_of.type == "object"
+    assert len(nested_any_of.properties) == 1
+    status_prop = nested_any_of.properties[0]
+    assert status_prop.name == "status"
+    assert status_prop.type == ["string", "integer"]
+    assert status_prop.any_of is not None
+    assert len(status_prop.any_of) == 2
+
+    # Test response schema with allOf
+    response = post_op.responses["200"]
+    assert response.format == "application/json"
+    response_schema = response.schema_
+    assert response_schema.properties[0].type == "object"
+    assert response_schema.properties[0].all_of is not None
+    assert len(response_schema.properties[0].all_of) == 2
+
+    # Verify merged properties from response allOf
+    assert len(response_schema.properties[0].properties) == 4
+    assert {p.name for p in response_schema.properties[0].properties} == {
+        "id",
+        "created_at",
+        "status",
+        "type",
+    }

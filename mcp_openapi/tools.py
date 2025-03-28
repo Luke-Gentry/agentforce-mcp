@@ -13,6 +13,7 @@ from mcp_openapi import parser
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
+from typing import Union  # noqa: F401
 
 # Maximum number of characters to include in enum descriptions
 MAX_ENUM_DESCRIPTION_LENGTH = 100
@@ -149,7 +150,22 @@ class Tool(BaseModel):
     @classmethod
     def _to_python_type(cls, param: parser.Parameter) -> str:
         py_type = "str"
-        if param.type == "string":
+        if isinstance(param.type, list):
+            # Handle anyOf types by creating a Union type
+            types = []
+            for t in param.type:
+                if t == "string":
+                    types.append("str")
+                elif t == "integer":
+                    types.append("int")
+                elif t == "number":
+                    types.append("float")
+                elif t == "boolean":
+                    types.append("bool")
+                else:
+                    types.append("Any")
+            return f"Union[{', '.join(types)}]"
+        elif param.type == "string":
             py_type = "str"
         elif param.type == "integer":
             py_type = "int"

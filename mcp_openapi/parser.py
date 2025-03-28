@@ -22,10 +22,12 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 class SchemaProperty(BaseModel):
     name: str
-    type: str
+    type: str | list[str]  # Can be a single type or list of types for anyOf
     items: Optional["SchemaProperty"] = None
     properties: Optional[List["SchemaProperty"]] = None
     description: Optional[str] = None
+    any_of: Optional[List["SchemaProperty"]] = None  # For anyOf schemas
+    all_of: Optional[List["SchemaProperty"]] = None  # For allOf schemas
 
 
 class Schema(BaseModel):
@@ -229,21 +231,69 @@ class Config:
             resolved_schema = schema
 
         if resolved_schema.allOf:
-            for schema in resolved_schema.allOf:
-                sub_schema = cls._process_schema(
-                    schema, api, depth + 1, max_depth, visited
+            # For allOf, merge all schemas into one
+            all_properties = []
+            all_schemas = []
+            for sub_schema in resolved_schema.allOf:
+                sub_result = cls._process_schema(
+                    sub_schema, api, depth + 1, max_depth, visited
                 )
-                if sub_schema and sub_schema.properties:
-                    properties.extend(sub_schema.properties)
-        elif resolved_schema.anyOf:
-            for schema in resolved_schema.anyOf:
-                if schema.type == "object" or schema.type == "array":
-                    result = cls._process_schema(
-                        schema, api, depth + 1, max_depth, visited
+                if sub_result:
+                    # Convert Schema to SchemaProperty for all_of
+                    all_schemas.append(
+                        SchemaProperty(
+                            name=sub_result.name,
+                            type="object",
+                            properties=sub_result.properties,
+                            description=sub_schema.description,
+                        )
                     )
-                    if result and result.properties:
-                        return result
+                    if sub_result.properties:
+                        all_properties.extend(sub_result.properties)
+
+            # Create a single property that contains all merged properties
+            if all_properties:
+                return Schema(
+                    name=schema_name,
+                    properties=[
+                        SchemaProperty(
+                            name="merged",
+                            type="object",
+                            properties=all_properties,
+                            description=resolved_schema.description,
+                            all_of=all_schemas,
+                        )
+                    ],
+                )
             return None
+
+        elif resolved_schema.anyOf:
+            # For anyOf, create a property that can be any of the types
+            any_of_properties = []
+            types = []
+            for sub_schema in resolved_schema.anyOf:
+                if sub_schema.type:
+                    types.append(sub_schema.type)
+                sub_result = cls._process_schema(
+                    sub_schema, api, depth + 1, max_depth, visited
+                )
+                if sub_result and sub_result.properties:
+                    any_of_properties.extend(sub_result.properties)
+
+            # Create a property with the union type, even if there are no properties
+            return Schema(
+                name=schema_name,
+                properties=[
+                    SchemaProperty(
+                        name="union",
+                        type=types if types else "object",
+                        properties=any_of_properties if any_of_properties else None,
+                        description=resolved_schema.description,
+                        any_of=any_of_properties if any_of_properties else None,
+                    )
+                ],
+            )
+
         elif resolved_schema.properties:
             for prop_name, prop_schema in resolved_schema.properties.items():
                 # Get the type from the schema, defaulting to "object" if not specified
@@ -303,14 +353,53 @@ class Config:
                             prop.properties = nested_schema.properties
                     elif prop_schema.anyOf:
                         # Handle anyOf in object properties
+                        types = []
+                        any_of_schemas = []
                         for schema in prop_schema.anyOf:
-                            if schema.type == "object":
-                                result = cls._process_schema(
-                                    schema, api, depth + 1, max_depth, visited
+                            if schema.type:
+                                types.append(schema.type)
+                            result = cls._process_schema(
+                                schema, api, depth + 1, max_depth, visited
+                            )
+                            if result:
+                                # Convert Schema to SchemaProperty for any_of
+                                any_of_schemas.append(
+                                    SchemaProperty(
+                                        name=result.name,
+                                        type=schema.type
+                                        or "object",  # Use the schema's type
+                                        properties=result.properties,
+                                        description=schema.description,
+                                    )
                                 )
-                                if result and result.properties:
-                                    prop.properties = result.properties
-                                    break
+
+                        prop.type = types if types else "object"
+                        prop.any_of = any_of_schemas
+                        # For anyOf in object properties, we don't merge properties
+                        prop.properties = None
+                    elif prop_schema.allOf:
+                        # Handle allOf in object properties
+                        all_properties = []
+                        all_schemas = []
+                        for schema in prop_schema.allOf:
+                            result = cls._process_schema(
+                                schema, api, depth + 1, max_depth, visited
+                            )
+                            if result:
+                                # Convert Schema to SchemaProperty for all_of
+                                all_schemas.append(
+                                    SchemaProperty(
+                                        name=result.name,
+                                        type="object",
+                                        properties=result.properties,
+                                        description=schema.description,
+                                    )
+                                )
+                                if result.properties:
+                                    all_properties.extend(result.properties)
+                        if all_properties:
+                            prop.properties = all_properties
+                            prop.all_of = all_schemas
                     elif prop_schema.additionalProperties:
                         # For additionalProperties, we don't set properties
                         prop.properties = None
@@ -320,13 +409,42 @@ class Config:
                             nested_name,
                             nested_schema,
                         ) in prop_schema.properties.items():
-                            nested_schema = cls._process_schema(
-                                nested_schema, api, depth + 1, max_depth, visited
-                            )
-                            if nested_schema and nested_schema.properties:
-                                nested_prop = nested_schema.properties[0]
-                                nested_prop.name = nested_name
+                            if nested_schema.anyOf:
+                                # Handle anyOf in nested properties
+                                types = []
+                                any_of_schemas = []
+                                for schema in nested_schema.anyOf:
+                                    if schema.type:
+                                        types.append(schema.type)
+                                    result = cls._process_schema(
+                                        schema, api, depth + 1, max_depth, visited
+                                    )
+                                    if result:
+                                        # Convert Schema to SchemaProperty for any_of
+                                        any_of_schemas.append(
+                                            SchemaProperty(
+                                                name=result.name,
+                                                type=schema.type
+                                                or "object",  # Use the schema's type
+                                                properties=result.properties,
+                                                description=schema.description,
+                                            )
+                                        )
+                                nested_prop = SchemaProperty(
+                                    name=nested_name,
+                                    type=types if types else "object",
+                                    description=nested_schema.description,
+                                    any_of=any_of_schemas,
+                                )
                                 nested_properties.append(nested_prop)
+                            else:
+                                nested_schema = cls._process_schema(
+                                    nested_schema, api, depth + 1, max_depth, visited
+                                )
+                                if nested_schema and nested_schema.properties:
+                                    nested_prop = nested_schema.properties[0]
+                                    nested_prop.name = nested_name
+                                    nested_properties.append(nested_prop)
 
                         prop.properties = nested_properties
 
