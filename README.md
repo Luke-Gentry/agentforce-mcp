@@ -16,6 +16,8 @@ Install the necessary dependencies using [uv](https://github.com/astral-sh/uv).
 uv sync
 ```
 
+_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described belowc_
+
 Define your servers following the structure of `services.yaml.example`:
 
 ```
@@ -51,6 +53,76 @@ Then you can run your server to expose it:
 
 ```bash
 uv run main.py
+```
+
+## Scripts
+
+The project includes utility scripts to help with OpenAPI and MCP server management:
+
+### `slim-openapi`
+
+Reduces large OpenAPI specifications to only include specified routes and their dependencies. This is particularly useful for handling large specs like Stripe or Zendesk, where you only need a subset of the API.
+
+```bash
+uv run scripts/slim-openapi \
+    -u https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml \
+    --routes "/v1/customers$" \
+    -o stripe-slim.yaml
+```
+
+## Deployment
+
+The service can be deployed using Docker. First, ensure you have a `servers.yaml` file configured with your desired API endpoints (see the Quick Start section for an example).
+
+### Building the Docker Image
+
+```bash
+docker build -t mcp-openapi .
+```
+
+### Running the Container
+
+```bash
+docker run -p 8000:8000 -v $(pwd)/servers.yaml:/app/servers.yaml mcp-openapi
+```
+
+The `-v` flag mounts your local `servers.yaml` file into the container. You can also use environment variables to configure the service:
+
+- `PORT`: The port to run the server on (default: 8000)
+- `CONFIG`: Path to the servers configuration file (default: servers.yaml)
+
+Example with environment variables:
+
+```bash
+docker run -p 8000:8000 \
+  -v $(pwd)/servers.yaml:/app/servers.yaml \
+  -e PORT=8000 \
+  -e CONFIG=servers.yaml \
+  mcp-openapi
+```
+
+### Docker Compose
+
+You can also use Docker Compose for easier deployment. Create a `docker-compose.yml` file:
+
+```yaml
+version: "3.8"
+services:
+  mcp-openapi:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./servers.yaml:/app/servers.yaml
+    environment:
+      - PORT=8000
+      - CONFIG=servers.yaml
+```
+
+Then run:
+
+```bash
+docker-compose up
 ```
 
 ## Inspecting
@@ -164,3 +236,7 @@ curl -s localhost:8000/tools | jq '.'
 The MCP inspector is also useful for seeing what's available.
 
 ![mcp-inspector](images/mcp-inspector-httpbin.png)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
