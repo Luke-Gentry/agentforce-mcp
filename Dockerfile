@@ -11,17 +11,14 @@ RUN pip install uv
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
-
-# Install dependencies using uv
-RUN uv pip install .
-
 # Copy application code
 COPY . .
+
+# Install dependencies using uv
+RUN uv sync
 
 # Expose the port the app runs on
 EXPOSE 8000
 
 # Command to run the application
-CMD ["python", "main.py"] 
+CMD ["uv", "run", "python", "main.py"] 

@@ -269,7 +269,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiopenapi3" },
-    { name = "black" },
     { name = "jinja2" },
     { name = "mcp" },
     { name = "pyyaml" },
@@ -280,6 +279,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "black" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -289,7 +289,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiopenapi3", specifier = ">=0.8.0" },
-    { name = "black", specifier = ">=25.1.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "mcp", git = "https://github.com/ylassoued/python-sdk.git?rev=ylassoued%2Ffeat-request" },
     { name = "pyyaml", specifier = ">=6.0.2" },
@@ -300,6 +299,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "black", specifier = ">=25.1.0" },
     { name = "mypy", specifier = ">=1.14.1" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
