@@ -387,7 +387,7 @@ class Config:
                         nested_schema = cls._process_schema(
                             prop_schema, api, depth, max_depth, visited
                         )
-                        if nested_schema:
+                        if nested_schema and nested_schema.properties:
                             prop = Schema(
                                 name=prop_name,
                                 type=nested_schema.properties[0].type,
