@@ -526,7 +526,6 @@ class Config:
         if operation.requestBody:
             schema = None
             encoding = None
-            content_type = None
 
             # Handle form-encoded content
             if (
@@ -550,7 +549,6 @@ class Config:
                             ),
                             "contentType": getattr(encoding_obj, "contentType", None),
                         }
-                content_type = "application/x-www-form-urlencoded"
             # Handle JSON content
             elif (
                 operation.requestBody.content
@@ -560,7 +558,6 @@ class Config:
                     "application/json"
                 ].schema_
                 schema = cls._process_schema(content_schema, api)
-                content_type = "application/json"
 
             request_body = RequestBody(
                 description=getattr(operation.requestBody, "description", None),

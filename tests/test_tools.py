@@ -466,8 +466,6 @@ def test_tool_from_operation(mock_operation):
     assert enum_param.type == "str"
     assert "Options: option1, option2, option3" in enum_param.description
 
-    import pdb
-
     anyof_param = param_map["j_anyof_object_or_string"]
     assert anyof_param.type == "str"
     assert (

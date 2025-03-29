@@ -13,7 +13,6 @@ from mcp_openapi import parser
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
-from typing import Union  # noqa: F401
 
 # Maximum number of characters to include in enum descriptions
 MAX_ENUM_DESCRIPTION_LENGTH = 100
