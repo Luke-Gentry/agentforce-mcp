@@ -234,45 +234,6 @@ class Config:
         return all_schemas
 
     @classmethod
-    def _process_nested_properties(
-        cls, prop_schema, api, depth, max_depth, visited
-    ) -> Optional[Schema]:
-        """Helper method to process nested properties"""
-        if prop_schema.allOf:
-            all_schemas = cls.handle_all_of(
-                prop_schema.allOf, api, depth, max_depth, visited
-            )
-            return Schema(
-                name="all_of",
-                type="object",
-                properties=[prop for p in all_schemas for prop in p.properties],
-                description=prop_schema.description,
-                all_of=all_schemas,
-            )
-        elif prop_schema.anyOf:
-            # Handle anyOf in nested properties
-            any_of_schemas = cls.handle_any_of(
-                prop_schema.anyOf, api, depth, max_depth, visited
-            )
-            return Schema(
-                name="nested",
-                type=[p.type for p in any_of_schemas],
-                description=prop_schema.description,
-                any_of=any_of_schemas,
-            )
-
-        nested_schema = cls._process_schema(
-            prop_schema, api, depth + 1, max_depth, visited
-        )
-        if nested_schema and nested_schema.properties:
-            nested_prop = nested_schema.properties[0]
-            if hasattr(prop_schema, "name"):
-                nested_prop.name = prop_schema.name
-            return nested_prop
-
-        return None
-
-    @classmethod
     def _process_array_items(
         cls, item_schema, api, depth, max_depth, visited
     ) -> Schema:
@@ -388,7 +349,6 @@ class Config:
             processed_items = cls._process_schema(
                 resolved_schema.items, api, depth + 1, max_depth, visited
             )
-
             if not processed_items:
                 return Schema(name=schema_name, type="array", properties=[])
 
@@ -418,7 +378,12 @@ class Config:
                         prop_schema.items, api, depth, max_depth, visited
                     )
                 elif prop_type == "object":
-                    if prop_schema.anyOf or prop_schema.allOf:
+                    if (
+                        prop_schema.anyOf
+                        or prop_schema.allOf
+                        or hasattr(prop_schema, "ref")
+                    ):
+                        # For allOf/anyOf/ref we want to inline the properties
                         nested_schema = cls._process_schema(
                             prop_schema, api, depth, max_depth, visited
                         )
@@ -431,32 +396,10 @@ class Config:
                                 any_of=nested_schema.properties[0].any_of,
                                 all_of=nested_schema.properties[0].all_of,
                             )
-                    elif hasattr(prop_schema, "ref"):
-                        pass  # FIXME
-                    elif (
-                        not prop_schema.additionalProperties and prop_schema.properties
-                    ):
-                        nested_properties = []
-                        for (
-                            nested_name,
-                            nested_schema,
-                        ) in prop_schema.properties.items():
-                            nested_prop = cls._process_nested_properties(
-                                nested_schema, api, depth, max_depth, visited
-                            )
-                            if nested_prop:
-                                nested_properties.append(
-                                    Schema(
-                                        name=nested_name,
-                                        type=nested_prop.type,
-                                        properties=nested_prop.properties,
-                                        description=nested_prop.description,
-                                        any_of=nested_prop.any_of,
-                                        all_of=nested_prop.all_of,
-                                    )
-                                )
-
-                        prop.properties = nested_properties
+                    elif prop_schema.properties:
+                        prop.properties = cls._process_schema(
+                            prop_schema, api, depth, max_depth, visited
+                        ).properties
 
                 properties.append(prop)
 
