@@ -510,74 +510,70 @@ class Config:
             for prop in schema.properties:
                 output.append(f"{indent}  - {prop.name}: {prop.type}")
                 if prop.all_of:
-                    output.append(f"{indent}    All of:")
+                    output.append(f"{indent}{" " * 4}All of:")
                     for sub_schema in prop.all_of:
-                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        output.append(f"{indent}{" " * 6}- Type: {sub_schema.type}")
                         if sub_schema.properties:
-                            output.append(f"{indent}        Properties:")
+                            output.append(f"{indent}{" " * 8}Properties:")
                             for prop in sub_schema.properties:
                                 output.append(
-                                    f"{indent}          - {prop.name}: {prop.type}"
+                                    f"{indent}{" " * 10}- {prop.name}: {prop.type}"
                                 )
                                 if prop.items:
                                     output.append(
-                                        f"{indent}            Items: {prop.items.name}"
+                                        f"{indent}{" " * 12}Items: {prop.items.name}"
                                     )
                                     if prop.items.properties:
-                                        output.append(
-                                            f"{indent}              Properties:"
-                                        )
+                                        output.append(f"{indent}{" " * 14}Properties:")
                                         for item_prop in prop.items.properties:
                                             output.append(
-                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                                f"{indent}{" " * 16}- {item_prop.name}: {item_prop.type}"
                                             )
                         elif prop.properties:
-                            output.append(f"{indent}            Properties:")
+                            output.append(f"{indent}{" " * 12}Properties:")
                             for nested_prop in prop.properties:
                                 output.append(
-                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                    f"{indent}{" " * 14}- {nested_prop.name}: {nested_prop.type}"
                                 )
                 elif prop.any_of:
-                    output.append(f"{indent}    Any of:")
+                    output.append(f"{indent}{" " * 4}Any of:")
                     for sub_schema in prop.any_of:
-                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        output.append(f"{indent}{" " * 6}- Type: {sub_schema.type}")
                         if sub_schema.properties:
-                            output.append(f"{indent}        Properties:")
+                            output.append(f"{indent}{" " * 8}Properties:")
                             for prop in sub_schema.properties:
                                 output.append(
-                                    f"{indent}          - {prop.name}: {prop.type}"
+                                    f"{indent}{" " * 10}- {prop.name}: {prop.type}"
                                 )
                                 if prop.items:
                                     output.append(
-                                        f"{indent}            Items: {prop.items.name}"
+                                        f"{indent}{" " * 12}Items: {prop.items.name}"
                                     )
                                     if prop.items.properties:
-                                        output.append(
-                                            f"{indent}              Properties:"
-                                        )
+                                        output.append(f"{indent}{" " * 14}Properties:")
                                         for item_prop in prop.items.properties:
                                             output.append(
-                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                                f"{indent}{" " * 16}- {item_prop.name}: {item_prop.type}"
                                             )
                         elif prop.properties:
-                            output.append(f"{indent}            Properties:")
+                            output.append(f"{indent}{" " * 12}Properties:")
                             for nested_prop in prop.properties:
                                 output.append(
-                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                    f"{indent}{" " * 14}- {nested_prop.name}: {nested_prop.type}"
                                 )
                 elif prop.items:
-                    output.append(f"{indent}    Items: {prop.items.name}")
+                    output.append(f"{indent}{" " * 4}Items: {prop.items.name}")
                     if prop.items.properties:
-                        output.append(f"{indent}    Properties:")
+                        output.append(f"{indent}{" " * 4}Properties:")
                         for item_prop in prop.items.properties:
                             output.append(
-                                f"{indent}      - {item_prop.name}: {item_prop.type}"
+                                f"{indent}{" " * 6}- {item_prop.name}: {item_prop.type}"
                             )
                 elif prop.properties:
-                    output.append(f"{indent}    Properties:")
+                    output.append(f"{indent}{" " * 4}Properties:")
                     for nested_prop in prop.properties:
                         output.append(
-                            f"{indent}      - {nested_prop.name}: {nested_prop.type}"
+                            f"{indent}{" " * 6}- {nested_prop.name}: {nested_prop.type}"
                         )
 
             return "\n".join(output)
