@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-from pathlib import Path
-from typing import Optional
 
 from mcp_openapi.parser import Config
 

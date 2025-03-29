@@ -1,6 +1,4 @@
 # stdlib
-import inspect
-import types
 import re
 from typing import Any, Union
 
@@ -76,7 +74,7 @@ class Tool(BaseModel):
                 params_to_process = [(param.name, param)]
                 if param.properties:
                     params_to_process = [
-                        (f"nested_param.name", nested_param)
+                        ("nested_param.name", nested_param)
                         for nested_param in param.properties
                     ]
                 if param.any_of:

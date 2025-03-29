@@ -653,9 +653,7 @@ def mock_operation():
     )
 
     # Create request body
-    request_body = RequestBody(
-        description="Test request body", schema_=request_body_schema
-    )
+    _ = RequestBody(description="Test request body", schema_=request_body_schema)
 
 
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
