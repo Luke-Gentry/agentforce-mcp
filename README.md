@@ -25,6 +25,8 @@ While many MCP implementations rely on stdio (Standard Input/Output) for local i
 
 ## Quick Start
 
+### Starting the Server
+
 Install the necessary dependencies using [uv](https://github.com/astral-sh/uv).
 
 ```bash
@@ -95,40 +97,19 @@ docker run -p 8000:8000 \
   mcp-openapi
 ```
 
-## Usage
+### Client Access
 
-The project includes two example clients that demonstrate different ways to interact with the MCP-OpenAPI server:
+The project includes two example clients that demonstrate different ways to interact with the MCP-OpenAPI server.
 
-### LangChain Integration (`examples/langchain_client.py`)
+Both examples use the same server configuration and demonstrate header forwarding for authentication. The low-level client is particularly useful for custom integrations or when you need more direct control over the MCP client.
+
+**LangChain Integration (`examples/langchain_client.py`)**
 
 This example shows how to integrate the MCP-OpenAPI server with LangChain, allowing AI agents to use your APIs through LangChain's tool system. It demonstrates:
 
-- Setting up a LangChain agent with MCP tools
-- Interactive chat interface for API interactions
-- Header forwarding for authentication
-- Error handling and chat history management
+**Low-Level Client (`examples/low_level_client.py`)**
 
-```bash
-uv pip install langchain==0.3.21 langchain-mcp-adapters==0.0.5 langchain-openai==0.3.10
-uv run examples/langchain_client.py
-```
-
-### Low-Level Client (`examples/low_level_client.py`)
-
-This example demonstrates direct usage of the MCP client with SSE transport, showing how to:
-
-- Connect to the server using SSE transport
-- Set up a client session with custom headers
-- List and call available tools
-- Handle responses and errors
-- Use multiple API endpoints (weather and httpbin examples)
-
-```bash
-uv pip install mcp-openapi httpx-sse
-uv run examples/low_level_client.py
-```
-
-Both examples use the same server configuration and demonstrate header forwarding for authentication. The low-level client is particularly useful for custom integrations or when you need more direct control over the MCP client.
+This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
 
 ## Slimming down specs with `slim-openapi`
 
