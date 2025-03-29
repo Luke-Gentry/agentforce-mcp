@@ -150,9 +150,7 @@ class Tool(BaseModel):
         return name
 
     @classmethod
-    def _to_python_type(
-        cls, param: Union[parser.Parameter, parser.SchemaProperty]
-    ) -> str:
+    def _to_python_type(cls, param: Union[parser.Parameter, parser.Schema]) -> str:
         py_type = "str"
         if (
             isinstance(param, parser.Parameter)

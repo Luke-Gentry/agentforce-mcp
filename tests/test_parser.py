@@ -5,7 +5,7 @@ import yaml
 import os
 from pathlib import Path
 
-from mcp_openapi.parser import Config
+from mcp_openapi.parser import Config, Schema, RequestBody
 
 
 @pytest.fixture
@@ -591,6 +591,71 @@ def anyof_allof_spec():
             }
         },
     }
+
+
+@pytest.fixture
+def mock_operation():
+    """Create a mock operation with various parameter types"""
+    # Create request body schema with nested properties
+    request_body_schema = Schema(
+        name="TestRequestBody",
+        type="object",
+        properties=[
+            Schema(
+                name="body_string", type="string", description="A body string parameter"
+            ),
+            Schema(
+                name="body_object",
+                type="object",
+                description="A body object parameter",
+                properties=[
+                    Schema(
+                        name="nested_string",
+                        type="string",
+                        description="A nested string parameter",
+                    ),
+                    Schema(
+                        name="nested_int",
+                        type="integer",
+                        description="A nested integer parameter",
+                    ),
+                ],
+            ),
+            Schema(
+                name="anyof_object_or_string",
+                description="A union parameter that can be object or string",
+                type=["object", "string"],
+                any_of=[
+                    Schema(
+                        name="ObjectSchema",
+                        type="object",
+                        properties=[
+                            Schema(
+                                name="anyof_nested_string",
+                                type="string",
+                                description="A nested string parameter",
+                            ),
+                            Schema(
+                                name="anyof_nested_int",
+                                type="integer",
+                                description="A nested integer parameter",
+                            ),
+                        ],
+                    ),
+                    Schema(
+                        name="anyof_string",
+                        type="string",
+                        description="A string parameter",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    # Create request body
+    request_body = RequestBody(
+        description="Test request body", schema_=request_body_schema
+    )
 
 
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):

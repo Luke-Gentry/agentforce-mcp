@@ -15,7 +15,6 @@ from mcp_openapi.parser import (
     Parameter,
     RequestBody,
     Schema,
-    SchemaProperty,
 )
 
 from starlette.requests import Request
@@ -110,49 +109,50 @@ def mock_operation():
     # Create request body schema with nested properties
     request_body_schema = Schema(
         name="TestRequestBody",
+        type="object",
         properties=[
-            SchemaProperty(
+            Schema(
                 name="body_string", type="string", description="A body string parameter"
             ),
-            SchemaProperty(
+            Schema(
                 name="body_object",
                 type="object",
                 description="A body object parameter",
                 properties=[
-                    SchemaProperty(
+                    Schema(
                         name="nested_string",
                         type="string",
                         description="A nested string parameter",
                     ),
-                    SchemaProperty(
+                    Schema(
                         name="nested_int",
                         type="integer",
                         description="A nested integer parameter",
                     ),
                 ],
             ),
-            SchemaProperty(
+            Schema(
                 name="anyof_object_or_string",
                 description="A union parameter that can be object or string",
-                type="anyOf",
+                type=["object", "string"],
                 any_of=[
-                    SchemaProperty(
+                    Schema(
                         name="ObjectSchema",
                         type="object",
                         properties=[
-                            SchemaProperty(
+                            Schema(
                                 name="anyof_nested_string",
                                 type="string",
                                 description="A nested string parameter",
                             ),
-                            SchemaProperty(
+                            Schema(
                                 name="anyof_nested_int",
                                 type="integer",
                                 description="A nested integer parameter",
                             ),
                         ],
                     ),
-                    SchemaProperty(
+                    Schema(
                         name="anyof_string",
                         type="string",
                         description="A string parameter",
@@ -467,7 +467,7 @@ def test_tool_from_operation(mock_operation):
     assert "Options: option1, option2, option3" in enum_param.description
 
     anyof_param = param_map["j_anyof_object_or_string"]
-    assert anyof_param.type == "str"
+    assert anyof_param.type == "Union[Any, str]"
     assert (
         "One of: (Object with properties: anyof_nested_string, anyof_nested_int) OR (A string parameter)"
         in anyof_param.description
@@ -497,7 +497,7 @@ def test_tool_from_operation_with_long_enum():
         ],
         request_body_=RequestBody(
             description="Empty request body",
-            schema_=Schema(name="EmptySchema", properties=[]),
+            schema_=Schema(name="EmptySchema", type="object", properties=[]),
         ),
         responses={},
     )

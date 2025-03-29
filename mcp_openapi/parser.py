@@ -20,19 +20,14 @@ CACHE_DIR = Path.home() / ".mcp-openapi" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class SchemaProperty(BaseModel):
-    name: str
-    type: str | list[str]  # Can be a single type or list of types for anyOf
-    items: Optional["SchemaProperty"] = None
-    properties: Optional[List["SchemaProperty"]] = None
-    description: Optional[str] = None
-    any_of: Optional[List["SchemaProperty"]] = None  # For anyOf schemas
-    all_of: Optional[List["SchemaProperty"]] = None  # For allOf schemas
-
-
 class Schema(BaseModel):
     name: str
-    properties: Optional[List[SchemaProperty]] = None
+    type: str | list[str]  # Can be a single type or list of types for anyOf
+    items: Optional["Schema"] = None
+    properties: Optional[List["Schema"]] = None
+    description: Optional[str] = None
+    any_of: Optional[List["Schema"]] = None  # For anyOf schemas
+    all_of: Optional[List["Schema"]] = None  # For allOf schemas
 
 
 class Parameter(BaseModel):
@@ -116,7 +111,7 @@ class Config:
         file_path: str,
         path_patterns: list[str],
         base_path=pathlib.Path("").absolute(),
-    ):
+    ) -> "Config":
         # Create cache key from file path and patterns
         cache_key = hashlib.md5(
             f"{file_path}:{','.join(sorted(path_patterns))}".encode()
@@ -143,7 +138,7 @@ class Config:
         return config
 
     @classmethod
-    def from_url(cls, url: str, path_patterns: list[str]):
+    def from_url(cls, url: str, path_patterns: list[str]) -> "Config":
         # Create cache key from URL and patterns
         cache_key = hashlib.md5(
             f"{url}:{','.join(sorted(path_patterns))}".encode()
@@ -169,7 +164,7 @@ class Config:
         return config
 
     @classmethod
-    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]):
+    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]) -> "Config":
         paths = []
 
         compiled_patterns = [re.compile(pattern) for pattern in path_patterns]
@@ -197,18 +192,20 @@ class Config:
 
         return cls(paths=paths)
 
-    def __init__(self, paths: List[Path]):
+    def __init__(self, paths: List[Path]) -> None:
         self.paths = paths
 
     @classmethod
-    def handle_any_of(cls, schemas, api, depth=0, max_depth=10, visited=None):
+    def handle_any_of(
+        cls, schemas, api, depth=0, max_depth=10, visited=None
+    ) -> List[Schema]:
         """Helper function to process anyOf schemas"""
         any_of_schemas = []
         for sub_schema in schemas:
             result = cls._process_schema(sub_schema, api, depth + 1, max_depth, visited)
             if result:
                 any_of_schemas.append(
-                    SchemaProperty(
+                    Schema(
                         name=result.name,
                         type=sub_schema.type or "object",
                         properties=result.properties,
@@ -218,14 +215,16 @@ class Config:
         return any_of_schemas
 
     @classmethod
-    def handle_all_of(cls, schemas, api, depth=0, max_depth=10, visited=None):
+    def handle_all_of(
+        cls, schemas, api, depth=0, max_depth=10, visited=None
+    ) -> List[Schema]:
         """Helper function to process allOf schemas"""
         all_schemas = []
         for sub_schema in schemas:
             result = cls._process_schema(sub_schema, api, depth + 1, max_depth, visited)
             if result:
                 all_schemas.append(
-                    SchemaProperty(
+                    Schema(
                         name=result.name,
                         type="object",
                         properties=result.properties,
@@ -237,13 +236,13 @@ class Config:
     @classmethod
     def _process_nested_properties(
         cls, prop_schema, api, depth, max_depth, visited
-    ) -> SchemaProperty:
+    ) -> Optional[Schema]:
         """Helper method to process nested properties"""
         if prop_schema.allOf:
             all_schemas = cls.handle_all_of(
                 prop_schema.allOf, api, depth, max_depth, visited
             )
-            return SchemaProperty(
+            return Schema(
                 name="all_of",
                 type="object",
                 properties=[prop for p in all_schemas for prop in p.properties],
@@ -255,7 +254,7 @@ class Config:
             any_of_schemas = cls.handle_any_of(
                 prop_schema.anyOf, api, depth, max_depth, visited
             )
-            return SchemaProperty(
+            return Schema(
                 name="nested",
                 type=[p.type for p in any_of_schemas],
                 description=prop_schema.description,
@@ -274,7 +273,9 @@ class Config:
         return None
 
     @classmethod
-    def _process_array_items(cls, item_schema, api, depth, max_depth, visited):
+    def _process_array_items(
+        cls, item_schema, api, depth, max_depth, visited
+    ) -> Schema:
         """Helper method to process array items"""
         if hasattr(item_schema, "ref"):
             item_name = item_schema.ref.split("/")[-1]
@@ -286,7 +287,7 @@ class Config:
                     item_prop_schema,
                 ) in resolved_item_schema.properties.items():
                     item_prop_type = item_prop_schema.type or "object"
-                    item_prop = SchemaProperty(
+                    item_prop = Schema(
                         name=item_prop_name,
                         type=item_prop_type,
                         description=item_prop_schema.description,
@@ -298,14 +299,14 @@ class Config:
                         if nested_schema:
                             item_prop.properties = nested_schema.properties
                     item_properties.append(item_prop)
-                return SchemaProperty(
+                return Schema(
                     name=item_name,
                     type="object",
                     properties=item_properties,
                     description=item_schema.description,
                 )
 
-        return SchemaProperty(
+        return Schema(
             name="item",
             type=item_schema.type or "object",
             description=item_schema.description,
@@ -350,8 +351,9 @@ class Config:
             )
             return Schema(
                 name=schema_name,
+                type="object",
                 properties=[
-                    SchemaProperty(
+                    Schema(
                         name="all_of",
                         type="object",
                         properties=[prop for p in all_schemas for prop in p.properties],
@@ -367,8 +369,9 @@ class Config:
             )
             return Schema(
                 name=schema_name,
+                type="object",
                 properties=[
-                    SchemaProperty(
+                    Schema(
                         name="any_of",
                         type=[p.type for p in any_of_schemas],
                         description=resolved_schema.description,
@@ -380,21 +383,21 @@ class Config:
         # Handle array type
         elif resolved_schema.type == "array":
             if not resolved_schema.items:
-                return Schema(name=schema_name, properties=[])
+                return Schema(name=schema_name, type="array", properties=[])
 
             processed_items = cls._process_schema(
                 resolved_schema.items, api, depth + 1, max_depth, visited
             )
 
             if not processed_items:
-                return Schema(name=schema_name, properties=[])
+                return Schema(name=schema_name, type="array", properties=[])
 
             properties.append(
-                SchemaProperty(
+                Schema(
                     name="inline",
                     type="array",
                     description=resolved_schema.description,
-                    items=SchemaProperty(
+                    items=Schema(
                         name="item",
                         type=resolved_schema.items.type or "object",
                         properties=processed_items.properties,
@@ -407,7 +410,7 @@ class Config:
         elif resolved_schema.properties:
             for prop_name, prop_schema in resolved_schema.properties.items():
                 prop_type = prop_schema.type or "object"
-                prop = SchemaProperty(
+                prop = Schema(
                     name=prop_name, type=prop_type, description=prop_schema.description
                 )
                 if prop_type == "array" and prop_schema.items:
@@ -420,7 +423,7 @@ class Config:
                             prop_schema, api, depth, max_depth, visited
                         )
                         if nested_schema:
-                            prop = SchemaProperty(
+                            prop = Schema(
                                 name=prop_name,
                                 type=nested_schema.properties[0].type,
                                 description=prop_schema.description,
@@ -443,7 +446,7 @@ class Config:
                             )
                             if nested_prop:
                                 nested_properties.append(
-                                    SchemaProperty(
+                                    Schema(
                                         name=nested_name,
                                         type=nested_prop.type,
                                         properties=nested_prop.properties,
@@ -459,6 +462,7 @@ class Config:
 
         return Schema(
             name=schema_name,
+            type="object",
             properties=properties,
         )
 
@@ -560,7 +564,7 @@ class Config:
             responses=processed_responses,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         output = []
 
         def _repr_schema(schema: Schema, indent: str = "") -> str:
