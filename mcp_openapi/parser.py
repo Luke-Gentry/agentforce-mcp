@@ -546,10 +546,6 @@ class Config:
                                     f"{indent}              - {nested_prop.name}: {nested_prop.type}"
                                 )
                 elif prop.any_of:
-                    if prop.name == "address":
-                        import pdb
-
-                        pdb.set_trace()
                     output.append(f"{indent}    Any of:")
                     for sub_schema in prop.any_of:
                         output.append(f"{indent}      - Type: {sub_schema.type}")
