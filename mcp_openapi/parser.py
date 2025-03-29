@@ -79,28 +79,17 @@ class Path(BaseModel):
     patch: Optional[Operation] = None
 
 
-class SchemaSelector(Init):
-    """
-    remove the schemas we do not need models for
-    """
-
-    def __init__(self, *schemas):
+class FilterPaths(Document):
+    def __init__(self, path_patterns: list[str]):
         super().__init__()
-        self._schemas = schemas
+        self._path_patterns = [re.compile(pattern) for pattern in path_patterns]
 
-    def schemas(self, ctx: "Init.Context") -> "Init.Context":
-        ctx.schemas = {
-            k: ctx.schemas[k] for k in (set(self._schemas) & set(ctx.schemas.keys()))
-        }
-        return ctx
-
-
-class RemovePaths(Document):
     def parsed(self, ctx: "Document.Context") -> "Document.Context":
-        """
-        emtpy the paths - not needed
-        """
-        ctx.document["paths"] = {}
+        ctx.document["paths"] = {
+            k: v
+            for k, v in ctx.document["paths"].items()
+            if any(pattern.match(k) for pattern in self._path_patterns)
+        }
         return ctx
 
 
@@ -125,10 +114,12 @@ class Config:
                 return pickle.load(f)
 
         logger.info(f"Cold loading OpenAPI spec from {file_path}")
+
         api = aiopenapi3.OpenAPI.load_file(
             file_path,
             file_path,
             loader=aiopenapi3.FileSystemLoader(base_path),
+            plugins=[FilterPaths(path_patterns)],
         )
         config = cls._from_api(api, path_patterns)
 
@@ -154,6 +145,7 @@ class Config:
         api = aiopenapi3.OpenAPI.load_sync(
             url,
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
+            plugins=[FilterPaths(path_patterns)],
         )
         config = cls._from_api(api, path_patterns)
 
