@@ -7,7 +7,6 @@ from mcp_openapi.tools import (
     Tool,
     ToolParameter,
     create_tool_function_exec,
-    create_tool_function_noexec,
 )
 from mcp_openapi.proxy import MCPProxy
 from mcp_openapi.parser import (
@@ -15,7 +14,6 @@ from mcp_openapi.parser import (
     Parameter,
     RequestBody,
     Schema,
-    SchemaProperty,
 )
 
 from starlette.requests import Request
@@ -38,10 +36,11 @@ def mock_tool():
                 default="None",
             ),
             ToolParameter(
-                name="j_body_param",
+                name="body_param",
                 type="dict",
                 description="Body parameter",
                 default="None",
+                request_body=True,
             ),
         ],
         method="POST",
@@ -110,49 +109,50 @@ def mock_operation():
     # Create request body schema with nested properties
     request_body_schema = Schema(
         name="TestRequestBody",
+        type="object",
         properties=[
-            SchemaProperty(
+            Schema(
                 name="body_string", type="string", description="A body string parameter"
             ),
-            SchemaProperty(
+            Schema(
                 name="body_object",
                 type="object",
                 description="A body object parameter",
                 properties=[
-                    SchemaProperty(
+                    Schema(
                         name="nested_string",
                         type="string",
                         description="A nested string parameter",
                     ),
-                    SchemaProperty(
+                    Schema(
                         name="nested_int",
                         type="integer",
                         description="A nested integer parameter",
                     ),
                 ],
             ),
-            SchemaProperty(
+            Schema(
                 name="anyof_object_or_string",
                 description="A union parameter that can be object or string",
-                type="anyOf",
+                type=["object", "string"],
                 any_of=[
-                    SchemaProperty(
+                    Schema(
                         name="ObjectSchema",
                         type="object",
                         properties=[
-                            SchemaProperty(
+                            Schema(
                                 name="anyof_nested_string",
                                 type="string",
                                 description="A nested string parameter",
                             ),
-                            SchemaProperty(
+                            Schema(
                                 name="anyof_nested_int",
                                 type="integer",
                                 description="A nested integer parameter",
                             ),
                         ],
                     ),
-                    SchemaProperty(
+                    Schema(
                         name="anyof_string",
                         type="string",
                         description="A string parameter",
@@ -219,39 +219,39 @@ def mock_operation():
     )
 
 
-@pytest.mark.asyncio
-async def test_tool_function_noexec(mock_tool, mock_context):
-    """Test the noexec tool function creation"""
-    # Create the tool function
-    tool_func = create_tool_function_noexec(mock_tool)
+# @pytest.mark.asyncio
+# async def test_tool_function_noexec(mock_tool, mock_context):
+#     """Test the noexec tool function creation"""
+#     # Create the tool function
+#     tool_func = create_tool_function_noexec(mock_tool)
 
-    # Mock httpx client
-    mock_response = AsyncMock()
-    mock_response.text = '{"result": "success"}'
+#     # Mock httpx client
+#     mock_response = AsyncMock()
+#     mock_response.text = '{"result": "success"}'
 
-    # Create an AsyncMock for the client itself
-    mock_client_instance = AsyncMock()
-    mock_client_instance.request.return_value = mock_response
-    mock_client_instance.aclose = AsyncMock()  # Add mock for aclose method
+#     # Create an AsyncMock for the client itself
+#     mock_client_instance = AsyncMock()
+#     mock_client_instance.request.return_value = mock_response
+#     mock_client_instance.aclose = AsyncMock()  # Add mock for aclose method
 
-    with patch("httpx.AsyncClient") as mock_client:
-        # Return the mock client instance directly instead of using __aenter__
-        mock_client.return_value = mock_client_instance
+#     with patch("httpx.AsyncClient") as mock_client:
+#         # Return the mock client instance directly instead of using __aenter__
+#         mock_client.return_value = mock_client_instance
 
-        # Test function execution
-        result = await tool_func(
-            mock_context, param1="test", param2=123, j_body_param={"key": "value"}
-        )
+#         # Test function execution
+#         result = await tool_func(
+#             mock_context, param1="test", param2=123, body_param={"key": "value"}
+#         )
 
-        # Verify the request was made correctly
-        mock_client_instance.request.assert_called_once()
-        call_args = mock_client_instance.request.call_args[1]
+#         # Verify the request was made correctly
+#         mock_client_instance.request.assert_called_once()
+#         call_args = mock_client_instance.request.call_args[1]
 
-        assert call_args["method"] == "POST"
-        assert call_args["url"] == "http://test.com/test/path"
-        assert call_args["params"] == {"param1": "test", "param2": 123}
-        assert call_args["json"] == {"body_param": {"key": "value"}}
-        assert result == '{"result": "success"}'
+#         assert call_args["method"] == "POST"
+#         assert call_args["url"] == "http://test.com/test/path"
+#         assert call_args["params"] == {"param1": "test", "param2": 123}
+#         assert call_args["json"] == {"body_param": {"key": "value"}}
+#         assert result == '{"result": "success"}'
 
 
 @pytest.mark.asyncio
@@ -275,7 +275,7 @@ async def test_tool_function_exec(mock_tool, mock_context):
 
         # Test function execution
         result = await tool_func(
-            mock_context, param1="test", param2=123, j_body_param={"key": "value"}
+            mock_context, param1="test", param2=123, body_param={"key": "value"}
         )
 
         # Verify the request was made correctly
@@ -330,36 +330,36 @@ def test_tool_parameter_conversion():
     )
 
     # Create function using noexec method
-    tool_func = create_tool_function_noexec(tool)
+    tool_func = create_tool_function_exec(tool)
 
     # Verify parameter types
     sig = inspect.signature(tool_func)
     assert (
-        sig.parameters["string_param"].annotation
-        == 'Field(description="String parameter", default=None)'
+        str(sig.parameters["string_param"])
+        == "string_param: str = FieldInfo(annotation=NoneType, required=False, default='None', description='String parameter')"
     )
     assert (
-        sig.parameters["int_param"].annotation
-        == 'Field(description="Integer parameter", default=None)'
+        str(sig.parameters["int_param"])
+        == "int_param: int = FieldInfo(annotation=NoneType, required=False, default='None', description='Integer parameter')"
     )
     assert (
-        sig.parameters["float_param"].annotation
-        == 'Field(description="Float parameter", default=None)'
+        str(sig.parameters["float_param"])
+        == "float_param: float = FieldInfo(annotation=NoneType, required=False, default='None', description='Float parameter')"
     )
     assert (
-        sig.parameters["bool_param"].annotation
-        == 'Field(description="Boolean parameter", default=None)'
+        str(sig.parameters["bool_param"])
+        == "bool_param: bool = FieldInfo(annotation=NoneType, required=False, default='None', description='Boolean parameter')"
     )
     assert (
-        sig.parameters["array_param"].annotation
-        == 'Field(description="Array parameter", default=None)'
+        str(sig.parameters["array_param"])
+        == "array_param: list[str] = FieldInfo(annotation=NoneType, required=False, default='None', description='Array parameter')"
     )
 
 
 def test_tool_parameter_enums_and_defaults(weather_tool):
     """Test that tool parameters correctly handle enums and defaults"""
     # Create function using noexec method
-    tool_func = create_tool_function_noexec(weather_tool)
+    tool_func = create_tool_function_exec(weather_tool)
 
     # Verify parameter types and descriptions
     sig = inspect.signature(tool_func)
@@ -367,22 +367,22 @@ def test_tool_parameter_enums_and_defaults(weather_tool):
     # Test temperature_unit parameter
     temp_param = sig.parameters["temperature_unit"]
     assert (
-        temp_param.annotation
-        == 'Field(description="Temperature unit Options: celsius, fahrenheit", default=celsius)'
+        str(temp_param)
+        == "temperature_unit: str = FieldInfo(annotation=NoneType, required=False, default='celsius', description='Temperature unit Options: celsius, fahrenheit')"
     )
 
     # Test wind_speed_unit parameter
     wind_param = sig.parameters["wind_speed_unit"]
     assert (
-        wind_param.annotation
-        == 'Field(description="Wind speed unit Options: kmh, ms, mph, kn", default=kmh)'
+        str(wind_param)
+        == "wind_speed_unit: str = FieldInfo(annotation=NoneType, required=False, default='kmh', description='Wind speed unit Options: kmh, ms, mph, kn')"
     )
 
     # Test timeformat parameter
     time_param = sig.parameters["timeformat"]
     assert (
-        time_param.annotation
-        == 'Field(description="Time format Options: iso8601, unixtime", default=iso8601)'
+        str(time_param)
+        == "timeformat: str = FieldInfo(annotation=NoneType, required=False, default='iso8601', description='Time format Options: iso8601, unixtime')"
     )
 
 
@@ -466,8 +466,8 @@ def test_tool_from_operation(mock_operation):
     assert enum_param.type == "str"
     assert "Options: option1, option2, option3" in enum_param.description
 
-    anyof_param = param_map["j_anyof_object_or_string"]
-    assert anyof_param.type == "str"
+    anyof_param = param_map["anyof_object_or_string"]
+    assert anyof_param.type == "Union[Any, str]"
     assert (
         "One of: (Object with properties: anyof_nested_string, anyof_nested_int) OR (A string parameter)"
         in anyof_param.description
@@ -497,7 +497,7 @@ def test_tool_from_operation_with_long_enum():
         ],
         request_body_=RequestBody(
             description="Empty request body",
-            schema_=Schema(name="EmptySchema", properties=[]),
+            schema_=Schema(name="EmptySchema", type="object", properties=[]),
         ),
         responses={},
     )

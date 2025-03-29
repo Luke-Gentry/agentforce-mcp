@@ -20,19 +20,14 @@ CACHE_DIR = Path.home() / ".mcp-openapi" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class SchemaProperty(BaseModel):
-    name: str
-    type: str | list[str]  # Can be a single type or list of types for anyOf
-    items: Optional["SchemaProperty"] = None
-    properties: Optional[List["SchemaProperty"]] = None
-    description: Optional[str] = None
-    any_of: Optional[List["SchemaProperty"]] = None  # For anyOf schemas
-    all_of: Optional[List["SchemaProperty"]] = None  # For allOf schemas
-
-
 class Schema(BaseModel):
     name: str
-    properties: Optional[List[SchemaProperty]] = None
+    type: str | list[str]  # Can be a single type or list of types for anyOf
+    items: Optional["Schema"] = None
+    properties: Optional[List["Schema"]] = None
+    description: Optional[str] = None
+    any_of: Optional[List["Schema"]] = None  # For anyOf schemas
+    all_of: Optional[List["Schema"]] = None  # For allOf schemas
 
 
 class Parameter(BaseModel):
@@ -116,14 +111,15 @@ class Config:
         file_path: str,
         path_patterns: list[str],
         base_path=pathlib.Path("").absolute(),
-    ):
-        # Create cache key from file path and patterns
+        use_cache=True,
+    ) -> "Config":
         cache_key = hashlib.md5(
             f"{file_path}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.pickle"
 
-        if cache_file.exists():
+        # Create cache key from file path and patterns
+        if use_cache and cache_file.exists():
             logger.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
@@ -143,14 +139,13 @@ class Config:
         return config
 
     @classmethod
-    def from_url(cls, url: str, path_patterns: list[str]):
-        # Create cache key from URL and patterns
+    def from_url(cls, url: str, path_patterns: list[str], use_cache=True) -> "Config":
         cache_key = hashlib.md5(
             f"{url}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.pickle"
 
-        if cache_file.exists():
+        if use_cache and cache_file.exists():
             logger.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
@@ -169,7 +164,7 @@ class Config:
         return config
 
     @classmethod
-    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]):
+    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]) -> "Config":
         paths = []
 
         compiled_patterns = [re.compile(pattern) for pattern in path_patterns]
@@ -197,8 +192,86 @@ class Config:
 
         return cls(paths=paths)
 
-    def __init__(self, paths: List[Path]):
+    def __init__(self, paths: List[Path]) -> None:
         self.paths = paths
+
+    @classmethod
+    def handle_any_of(
+        cls, schemas, api, depth=0, max_depth=10, visited=None
+    ) -> List[Schema]:
+        """Helper function to process anyOf schemas"""
+        any_of_schemas = []
+        for sub_schema in schemas:
+            result = cls._process_schema(sub_schema, api, depth + 1, max_depth, visited)
+            if result:
+                any_of_schemas.append(
+                    Schema(
+                        name=result.name,
+                        type=sub_schema.type or "object",
+                        properties=result.properties,
+                        description=sub_schema.description,
+                    )
+                )
+        return any_of_schemas
+
+    @classmethod
+    def handle_all_of(
+        cls, schemas, api, depth=0, max_depth=10, visited=None
+    ) -> List[Schema]:
+        """Helper function to process allOf schemas"""
+        all_schemas = []
+        for sub_schema in schemas:
+            result = cls._process_schema(sub_schema, api, depth + 1, max_depth, visited)
+            if result:
+                all_schemas.append(
+                    Schema(
+                        name=result.name,
+                        type="object",
+                        properties=result.properties,
+                        description=sub_schema.description,
+                    )
+                )
+        return all_schemas
+
+    @classmethod
+    def _process_array_items(
+        cls, item_schema, api, depth, max_depth, visited
+    ) -> Schema:
+        """Helper method to process array items"""
+        if hasattr(item_schema, "ref"):
+            item_name = item_schema.ref.split("/")[-1]
+            resolved_item_schema = api.components.schemas[item_name]
+            if resolved_item_schema.type == "object":
+                item_properties = []
+                for (
+                    item_prop_name,
+                    item_prop_schema,
+                ) in resolved_item_schema.properties.items():
+                    item_prop_type = item_prop_schema.type or "object"
+                    item_prop = Schema(
+                        name=item_prop_name,
+                        type=item_prop_type,
+                        description=item_prop_schema.description,
+                    )
+                    if item_prop_type == "object":
+                        nested_schema = cls._process_schema(
+                            item_prop_schema, api, depth + 1, max_depth, visited
+                        )
+                        if nested_schema:
+                            item_prop.properties = nested_schema.properties
+                    item_properties.append(item_prop)
+                return Schema(
+                    name=item_name,
+                    type="object",
+                    properties=item_properties,
+                    description=item_schema.description,
+                )
+
+        return Schema(
+            name="item",
+            type=item_schema.type or "object",
+            description=item_schema.description,
+        )
 
     @classmethod
     def _process_schema(
@@ -214,7 +287,7 @@ class Config:
             logger.warning(f"Max depth {max_depth} reached, stopping recursion")
             return None
 
-        # Track visited schemas to prevent cycles
+        # Handle circular references
         if hasattr(schema, "ref"):
             schema_ref = schema.ref
             if schema_ref in visited:
@@ -222,7 +295,7 @@ class Config:
                 return None
             visited.add(schema_ref)
 
-        properties = []
+        # Resolve schema
         if hasattr(schema, "ref"):
             schema_name = schema.ref.split("/")[-1]
             resolved_schema = api.components.schemas[schema_name]
@@ -230,242 +303,61 @@ class Config:
             schema_name = "inline"
             resolved_schema = schema
 
+        properties = []
+
+        # Handle composite schemas (allOf/anyOf)
         if resolved_schema.allOf:
-            # For allOf, merge all schemas into one
-            all_properties = []
-            all_schemas = []
-            for sub_schema in resolved_schema.allOf:
-                sub_result = cls._process_schema(
-                    sub_schema, api, depth + 1, max_depth, visited
-                )
-                if sub_result:
-                    # Convert Schema to SchemaProperty for all_of
-                    all_schemas.append(
-                        SchemaProperty(
-                            name=sub_result.name,
-                            type="object",
-                            properties=sub_result.properties,
-                            description=sub_schema.description,
-                        )
-                    )
-                    if sub_result.properties:
-                        all_properties.extend(sub_result.properties)
-
-            # Create a single property that contains all merged properties
-            if all_properties:
-                return Schema(
-                    name=schema_name,
-                    properties=[
-                        SchemaProperty(
-                            name="merged",
-                            type="object",
-                            properties=all_properties,
-                            description=resolved_schema.description,
-                            all_of=all_schemas,
-                        )
-                    ],
-                )
-            return None
-
-        elif resolved_schema.anyOf:
-            # For anyOf, create a property that can be any of the types
-            any_of_properties = []
-            types = []
-            for sub_schema in resolved_schema.anyOf:
-                if sub_schema.type:
-                    types.append(sub_schema.type)
-                sub_result = cls._process_schema(
-                    sub_schema, api, depth + 1, max_depth, visited
-                )
-                if sub_result and sub_result.properties:
-                    any_of_properties.extend(sub_result.properties)
-
-            # Create a property with the union type, even if there are no properties
+            all_schemas = cls.handle_all_of(
+                resolved_schema.allOf, api, depth, max_depth, visited
+            )
             return Schema(
                 name=schema_name,
+                type="object",
                 properties=[
-                    SchemaProperty(
-                        name="any_of",
-                        type=types if types else "object",
+                    Schema(
+                        name="all_of",
+                        type="object",
+                        properties=[prop for p in all_schemas for prop in p.properties],
                         description=resolved_schema.description,
-                        any_of=any_of_properties if any_of_properties else None,
+                        all_of=all_schemas,
                     )
                 ],
             )
 
-        elif resolved_schema.properties:
-            for prop_name, prop_schema in resolved_schema.properties.items():
-                # Get the type from the schema, defaulting to "object" if not specified
-                prop_type = prop_schema.type or "object"
-                prop = SchemaProperty(
-                    name=prop_name, type=prop_type, description=prop_schema.description
-                )
+        elif resolved_schema.anyOf:
+            any_of_schemas = cls.handle_any_of(
+                resolved_schema.anyOf, api, depth, max_depth, visited
+            )
+            return Schema(
+                name=schema_name,
+                type="object",
+                properties=[
+                    Schema(
+                        name="any_of",
+                        type=[p.type for p in any_of_schemas],
+                        description=resolved_schema.description,
+                        any_of=any_of_schemas if any_of_schemas else None,
+                    )
+                ],
+            )
 
-                if prop_type == "array" and prop_schema.items:
-                    item_schema = prop_schema.items
-                    if hasattr(item_schema, "ref"):
-                        item_name = item_schema.ref.split("/")[-1]
-                        resolved_item_schema = api.components.schemas[item_name]
-                        if resolved_item_schema.type == "object":
-                            item_properties = []
-                            for (
-                                item_prop_name,
-                                item_prop_schema,
-                            ) in resolved_item_schema.properties.items():
-                                item_prop_type = item_prop_schema.type or "object"
-                                item_prop = SchemaProperty(
-                                    name=item_prop_name,
-                                    type=item_prop_type,
-                                    description=item_prop_schema.description,
-                                )
-                                if item_prop_type == "object":
-                                    nested_schema = cls._process_schema(
-                                        item_prop_schema,
-                                        api,
-                                        depth + 1,
-                                        max_depth,
-                                        visited,
-                                    )
-                                    if nested_schema:
-                                        item_prop.properties = nested_schema.properties
-                                item_properties.append(item_prop)
-                            prop.items = SchemaProperty(
-                                name=item_name,
-                                type="object",
-                                properties=item_properties,
-                                description=item_schema.description,
-                            )
-                    else:
-                        item_type = item_schema.type or "object"
-                        prop.items = SchemaProperty(
-                            name="item",
-                            type=item_type,
-                            description=item_schema.description,
-                        )
-
-                elif prop_type == "object":
-                    if hasattr(prop_schema, "ref"):
-                        nested_schema = cls._process_schema(
-                            prop_schema, api, depth + 1, max_depth, visited
-                        )
-                        if nested_schema:
-                            prop.properties = nested_schema.properties
-                    elif prop_schema.anyOf:
-                        # Handle anyOf in object properties
-                        types = []
-                        any_of_schemas = []
-                        for schema in prop_schema.anyOf:
-                            if schema.type:
-                                types.append(schema.type)
-                            result = cls._process_schema(
-                                schema, api, depth + 1, max_depth, visited
-                            )
-                            if result:
-                                # Convert Schema to SchemaProperty for any_of
-                                any_of_schemas.append(
-                                    SchemaProperty(
-                                        name=result.name,
-                                        type=schema.type
-                                        or "object",  # Use the schema's type
-                                        properties=result.properties,
-                                        description=schema.description,
-                                    )
-                                )
-
-                        prop.type = types if types else "object"
-                        prop.any_of = any_of_schemas
-                        # For anyOf in object properties, we don't merge properties
-                        prop.properties = None
-                    elif prop_schema.allOf:
-                        # Handle allOf in object properties
-                        all_properties = []
-                        all_schemas = []
-                        for schema in prop_schema.allOf:
-                            result = cls._process_schema(
-                                schema, api, depth + 1, max_depth, visited
-                            )
-                            if result:
-                                # Convert Schema to SchemaProperty for all_of
-                                all_schemas.append(
-                                    SchemaProperty(
-                                        name=result.name,
-                                        type="object",
-                                        properties=result.properties,
-                                        description=schema.description,
-                                    )
-                                )
-                                if result.properties:
-                                    all_properties.extend(result.properties)
-                        if all_properties:
-                            prop.properties = all_properties
-                            prop.all_of = all_schemas
-                    elif prop_schema.additionalProperties:
-                        # For additionalProperties, we don't set properties
-                        prop.properties = None
-                    else:
-                        nested_properties = []
-                        for (
-                            nested_name,
-                            nested_schema,
-                        ) in prop_schema.properties.items():
-                            if nested_schema.anyOf:
-                                # Handle anyOf in nested properties
-                                types = []
-                                any_of_schemas = []
-                                for schema in nested_schema.anyOf:
-                                    if schema.type:
-                                        types.append(schema.type)
-                                    result = cls._process_schema(
-                                        schema, api, depth + 1, max_depth, visited
-                                    )
-                                    if result:
-                                        # Convert Schema to SchemaProperty for any_of
-                                        any_of_schemas.append(
-                                            SchemaProperty(
-                                                name=result.name,
-                                                type=schema.type
-                                                or "object",  # Use the schema's type
-                                                properties=result.properties,
-                                                description=schema.description,
-                                            )
-                                        )
-                                nested_prop = SchemaProperty(
-                                    name=nested_name,
-                                    type=types if types else "object",
-                                    description=nested_schema.description,
-                                    any_of=any_of_schemas,
-                                )
-                                nested_properties.append(nested_prop)
-                            else:
-                                nested_schema = cls._process_schema(
-                                    nested_schema, api, depth + 1, max_depth, visited
-                                )
-                                if nested_schema and nested_schema.properties:
-                                    nested_prop = nested_schema.properties[0]
-                                    nested_prop.name = nested_name
-                                    nested_properties.append(nested_prop)
-
-                        prop.properties = nested_properties
-
-                properties.append(prop)
+        # Handle array type
         elif resolved_schema.type == "array":
-            # Add null check for items
             if not resolved_schema.items:
-                return Schema(name=schema_name, properties=[])
+                return Schema(name=schema_name, type="array", properties=[])
 
             processed_items = cls._process_schema(
                 resolved_schema.items, api, depth + 1, max_depth, visited
             )
-
             if not processed_items:
-                return Schema(name=schema_name, properties=[])
+                return Schema(name=schema_name, type="array", properties=[])
 
             properties.append(
-                SchemaProperty(
+                Schema(
                     name="inline",
                     type="array",
                     description=resolved_schema.description,
-                    items=SchemaProperty(
+                    items=Schema(
                         name="item",
                         type=resolved_schema.items.type or "object",
                         properties=processed_items.properties,
@@ -473,8 +365,47 @@ class Config:
                     ),
                 )
             )
+
+        # Handle regular object properties
+        elif resolved_schema.properties:
+            for prop_name, prop_schema in resolved_schema.properties.items():
+                prop_type = prop_schema.type or "object"
+                prop = Schema(
+                    name=prop_name, type=prop_type, description=prop_schema.description
+                )
+                if prop_type == "array" and prop_schema.items:
+                    prop.items = cls._process_array_items(
+                        prop_schema.items, api, depth, max_depth, visited
+                    )
+                elif prop_type == "object":
+                    if (
+                        prop_schema.anyOf
+                        or prop_schema.allOf
+                        or hasattr(prop_schema, "ref")
+                    ):
+                        # For allOf/anyOf/ref we want to inline the properties
+                        nested_schema = cls._process_schema(
+                            prop_schema, api, depth, max_depth, visited
+                        )
+                        if nested_schema and nested_schema.properties:
+                            prop = Schema(
+                                name=prop_name,
+                                type=nested_schema.properties[0].type,
+                                description=prop_schema.description,
+                                properties=[nested_schema.properties[0]],
+                                any_of=nested_schema.properties[0].any_of,
+                                all_of=nested_schema.properties[0].all_of,
+                            )
+                    elif prop_schema.properties:
+                        prop.properties = cls._process_schema(
+                            prop_schema, api, depth, max_depth, visited
+                        ).properties
+
+                properties.append(prop)
+
         return Schema(
             name=schema_name,
+            type="object",
             properties=properties,
         )
 
@@ -576,30 +507,90 @@ class Config:
             responses=processed_responses,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         output = []
 
         def _repr_schema(schema: Schema, indent: str = "") -> str:
             """Helper function to format schema details recursively."""
             output = []
-            if schema.properties:
-                output.append(f"{indent}Properties:")
-                for prop in schema.properties:
-                    output.append(f"{indent}  - {prop.name}: {prop.type}")
-                    if prop.items:
-                        output.append(f"{indent}    Items: {prop.items.name}")
-                        if prop.items.properties:
-                            output.append(f"{indent}    Properties:")
-                            for item_prop in prop.items.properties:
+            # Handle regular properties
+            output.append(f"{indent}Properties:")
+            for prop in schema.properties:
+                output.append(f"{indent}  - {prop.name}: {prop.type}")
+                if prop.all_of:
+                    output.append(f"{indent}    All of:")
+                    for sub_schema in prop.all_of:
+                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        if sub_schema.properties:
+                            output.append(f"{indent}        Properties:")
+                            for prop in sub_schema.properties:
                                 output.append(
-                                    f"{indent}      - {item_prop.name}: {item_prop.type}"
+                                    f"{indent}          - {prop.name}: {prop.type}"
                                 )
-                    elif prop.properties:
+                                if prop.items:
+                                    output.append(
+                                        f"{indent}            Items: {prop.items.name}"
+                                    )
+                                    if prop.items.properties:
+                                        output.append(
+                                            f"{indent}              Properties:"
+                                        )
+                                        for item_prop in prop.items.properties:
+                                            output.append(
+                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                            )
+                        elif prop.properties:
+                            output.append(f"{indent}            Properties:")
+                            for nested_prop in prop.properties:
+                                output.append(
+                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                )
+                elif prop.any_of:
+                    if prop.name == "address":
+                        import pdb
+
+                        pdb.set_trace()
+                    output.append(f"{indent}    Any of:")
+                    for sub_schema in prop.any_of:
+                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        if sub_schema.properties:
+                            output.append(f"{indent}        Properties:")
+                            for prop in sub_schema.properties:
+                                output.append(
+                                    f"{indent}          - {prop.name}: {prop.type}"
+                                )
+                                if prop.items:
+                                    output.append(
+                                        f"{indent}            Items: {prop.items.name}"
+                                    )
+                                    if prop.items.properties:
+                                        output.append(
+                                            f"{indent}              Properties:"
+                                        )
+                                        for item_prop in prop.items.properties:
+                                            output.append(
+                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                            )
+                        elif prop.properties:
+                            output.append(f"{indent}            Properties:")
+                            for nested_prop in prop.properties:
+                                output.append(
+                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                )
+                elif prop.items:
+                    output.append(f"{indent}    Items: {prop.items.name}")
+                    if prop.items.properties:
                         output.append(f"{indent}    Properties:")
-                        for nested_prop in prop.properties:
+                        for item_prop in prop.items.properties:
                             output.append(
-                                f"{indent}      - {nested_prop.name}: {nested_prop.type}"
+                                f"{indent}      - {item_prop.name}: {item_prop.type}"
                             )
+                elif prop.properties:
+                    output.append(f"{indent}    Properties:")
+                    for nested_prop in prop.properties:
+                        output.append(
+                            f"{indent}      - {nested_prop.name}: {nested_prop.type}"
+                        )
 
             return "\n".join(output)
 

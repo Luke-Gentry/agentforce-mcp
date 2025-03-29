@@ -1,6 +1,4 @@
 # stdlib
-import inspect
-import types
 import re
 from typing import Any, Union
 
@@ -22,6 +20,7 @@ class ToolParameter(BaseModel):
     name: str
     type: str
     default: Any
+    request_body: bool = False
     description: str | None = None
 
 
@@ -72,10 +71,10 @@ class Tool(BaseModel):
         if operation.request_body_ and operation.request_body_.schema_:
             for param in operation.request_body_.schema_.properties:
                 # Process both the parameter itself and any nested properties
-                params_to_process = [(f"j_{param.name}", param)]
+                params_to_process = [(param.name, param)]
                 if param.properties:
                     params_to_process = [
-                        (f"j_{nested_param.name}", nested_param)
+                        ("nested_param.name", nested_param)
                         for nested_param in param.properties
                     ]
                 if param.any_of:
@@ -98,6 +97,7 @@ class Tool(BaseModel):
                             name=name,
                             type=cls._to_python_type(p),
                             description=p.description,
+                            request_body=True,
                             default="None",
                         )
                     )
@@ -150,9 +150,7 @@ class Tool(BaseModel):
         return name
 
     @classmethod
-    def _to_python_type(
-        cls, param: Union[parser.Parameter, parser.SchemaProperty]
-    ) -> str:
+    def _to_python_type(cls, param: Union[parser.Parameter, parser.Schema]) -> str:
         py_type = "str"
         if (
             isinstance(param, parser.Parameter)
@@ -222,88 +220,88 @@ def tools_from_config(config: parser.Config) -> list[Tool]:
     return tools
 
 
-def create_tool_function_noexec(tool):
-    # Define a template function that will be used as the code template
-    async def template_tool_function(ctx: Context, *args, **kwargs):
-        """Template function whose code will be reused"""
-        # Extract base URL and recorder from context
-        base_url = ctx.request_context.lifespan_context.base_url
-        proxy = ctx.request_context.lifespan_context.proxy
+# def create_tool_function_noexec(tool):
+#     # Define a template function that will be used as the code template
+#     async def template_tool_function(ctx: Context, *args, **kwargs):
+#         """Template function whose code will be reused"""
+#         # Extract base URL and recorder from context
+#         base_url = ctx.request_context.lifespan_context.base_url
+#         proxy = ctx.request_context.lifespan_context.proxy
 
-        # Build params and json data from kwargs
-        params = {k: v for k, v in kwargs.items() if not k.startswith("j_")}
-        json_body = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
+#         # Build params and json data from kwargs
+#         params = {k: v for k, v in kwargs.items() if not k.startswith("j_")}
+#         json_body = {k[2:]: v for k, v in kwargs.items() if k.startswith("j_")}
 
-        # Make the API request through the recorder
-        response = await proxy.do_request(
-            request=ctx.request_context.request,
-            method=tool.method,
-            url=f"{base_url}{tool.path}",
-            params=params,
-            json_body=json_body,
-        )
-        return response.text
+#         # Make the API request through the recorder
+#         response = await proxy.do_request(
+#             request=ctx.request_context.request,
+#             method=tool.method,
+#             url=f"{base_url}{tool.path}",
+#             params=params,
+#             json_body=json_body,
+#         )
+#         return response.text
 
-    # Create parameter objects for the signature
-    parameters = [
-        inspect.Parameter(
-            name="ctx",
-            kind=inspect.Parameter.POSITIONAL_ONLY,
-            annotation="Context",  # Use string annotation to avoid ForwardRef issues
-        )
-    ]
+#     # Create parameter objects for the signature
+#     parameters = [
+#         inspect.Parameter(
+#             name="ctx",
+#             kind=inspect.Parameter.POSITIONAL_ONLY,
+#             annotation="Context",  # Use string annotation to avoid ForwardRef issues
+#         )
+#     ]
 
-    # Add tool-specific parameters with Field types
-    for param in tool.parameters:
-        # Build the Field type string with description and default
-        field_parts = []
-        if param.description:
-            field_parts.append(f'description="{param.description}"')
-        if param.default is not None:
-            field_parts.append(f"default={param.default}")
-        else:
-            field_parts.append("default=None")
+#     # Add tool-specific parameters with Field types
+#     for param in tool.parameters:
+#         # Build the Field type string with description and default
+#         field_parts = []
+#         if param.description:
+#             field_parts.append(f'description="{param.description}"')
+#         if param.default is not None:
+#             field_parts.append(f"default={param.default}")
+#         else:
+#             field_parts.append("default=None")
 
-        # Create the full type annotation with Field
-        type_annotation = param.type
-        if field_parts:
-            type_annotation = f"Field({', '.join(field_parts)})"
+#         # Create the full type annotation with Field
+#         type_annotation = param.type
+#         if field_parts:
+#             type_annotation = f"Field({', '.join(field_parts)})"
 
-        parameters.append(
-            inspect.Parameter(
-                name=param.name,
-                kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=type_annotation,
-                default=inspect.Parameter.empty,
-            )
-        )
+#         parameters.append(
+#             inspect.Parameter(
+#                 name=param.name,
+#                 kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+#                 annotation=type_annotation,
+#                 default=inspect.Parameter.empty,
+#             )
+#         )
 
-    # Create signature with these parameters
-    sig = inspect.Signature(parameters=parameters)
+#     # Create signature with these parameters
+#     sig = inspect.Signature(parameters=parameters)
 
-    # Clone the code object from the template function
-    code = template_tool_function.__code__
+#     # Clone the code object from the template function
+#     code = template_tool_function.__code__
 
-    # Create a new function with the same code but new signature
-    wrapper_func = types.FunctionType(
-        code=code,
-        globals=template_tool_function.__globals__,
-        name=tool.name,
-        argdefs=template_tool_function.__defaults__,
-        closure=template_tool_function.__closure__,
-    )
+#     # Create a new function with the same code but new signature
+#     wrapper_func = types.FunctionType(
+#         code=code,
+#         globals=template_tool_function.__globals__,
+#         name=tool.name,
+#         argdefs=template_tool_function.__defaults__,
+#         closure=template_tool_function.__closure__,
+#     )
 
-    # Set function attributes
-    wrapper_func.__name__ = tool.name
-    wrapper_func.__doc__ = tool.description
-    wrapper_func.__signature__ = sig
-    wrapper_func.__annotations__ = {
-        "ctx": "Context",
-        "return": dict,
-        **{p.name: p.annotation for p in parameters[1:]},  # Skip ctx parameter
-    }
+#     # Set function attributes
+#     wrapper_func.__name__ = tool.name
+#     wrapper_func.__doc__ = tool.description
+#     wrapper_func.__signature__ = sig
+#     wrapper_func.__annotations__ = {
+#         "ctx": "Context",
+#         "return": dict,
+#         **{p.name: p.annotation for p in parameters[1:]},  # Skip ctx parameter
+#     }
 
-    return wrapper_func
+#     return wrapper_func
 
 
 def create_tool_function_exec(tool):
@@ -330,8 +328,8 @@ def create_tool_function_exec(tool):
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
     proxy = ctx.request_context.lifespan_context.proxy
-    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.name.startswith('j_'))} }}
-    json_body = {{ {', '.join(f'"{p.name[2:]}": {p.name}' for p in tool.parameters if p.name.startswith('j_'))} }}
+    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.request_body)} }}
+    json_body = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if p.request_body)} }}
 
     response = await proxy.do_request(
         request=ctx.request_context.request,
