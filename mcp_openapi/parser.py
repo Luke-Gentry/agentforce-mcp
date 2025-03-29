@@ -5,13 +5,13 @@ import logging
 import pickle
 import hashlib
 from pathlib import Path
+import pathlib
+from pydantic import BaseModel, Field
 
 # 3p
 import aiopenapi3
 from aiopenapi3.plugin import Document
 
-import pathlib
-from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
