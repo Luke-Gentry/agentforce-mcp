@@ -1007,8 +1007,10 @@ def test_anyof_allof_schemas(tmp_path, anyof_allof_spec):
     assert all_of_field.description == "Field that must satisfy all schemas"
 
     # Verify merged properties from allOf
-    assert len(all_of_field.properties) == 4
-    assert {p.name for p in all_of_field.properties} == {
+    assert len(all_of_field.properties) == 1
+    assert all_of_field.properties[0].name == "all_of"
+    assert len(all_of_field.properties[0].properties) == 4
+    assert {p.name for p in all_of_field.properties[0].properties} == {
         "name",
         "age",
         "email",
