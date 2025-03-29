@@ -9,7 +9,7 @@ from watchdog.events import FileSystemEventHandler
 # project
 from mcp_openapi.server_manager import ServerManager
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class ConfigFileHandler(FileSystemEventHandler):
@@ -29,7 +29,7 @@ class ConfigFileHandler(FileSystemEventHandler):
             return
         self.last_modified = current_time
 
-        logger.info(f"Config file changed: {event.src_path}")
+        log.info(f"Config file changed: {event.src_path}")
         asyncio.run_coroutine_threadsafe(self._handle_config_change(), self.loop)
 
     async def _handle_config_change(self):

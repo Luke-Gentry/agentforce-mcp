@@ -8,12 +8,12 @@ from pathlib import Path
 
 # 3p
 import aiopenapi3
-from aiopenapi3.plugin import Init, Document
+from aiopenapi3.plugin import Document
 
 import pathlib
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # Create cache directory in the user's home directory
 CACHE_DIR = Path.home() / ".mcp-openapi" / "cache"
@@ -109,11 +109,11 @@ class Config:
 
         # Create cache key from file path and patterns
         if use_cache and cache_file.exists():
-            logger.info(f"Loading cached OpenAPI spec from {cache_file}")
+            log.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
 
-        logger.info(f"Cold loading OpenAPI spec from {file_path}")
+        log.info(f"Loading OpenAPI spec from {file_path}")
 
         api = aiopenapi3.OpenAPI.load_file(
             file_path,
@@ -137,11 +137,11 @@ class Config:
         cache_file = CACHE_DIR / f"{cache_key}.pickle"
 
         if use_cache and cache_file.exists():
-            logger.info(f"Loading cached OpenAPI spec from {cache_file}")
+            log.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
 
-        logger.info(f"Cold loading OpenAPI spec from {url}")
+        log.info(f"Cold loading OpenAPI spec from {url}")
         api = aiopenapi3.OpenAPI.load_sync(
             url,
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
@@ -276,14 +276,14 @@ class Config:
 
         # Check depth limit
         if depth >= max_depth:
-            logger.warning(f"Max depth {max_depth} reached, stopping recursion")
+            log.debug(f"Max depth {max_depth} reached, stopping recursion")
             return None
 
         # Handle circular references
         if hasattr(schema, "ref"):
             schema_ref = schema.ref
             if schema_ref in visited:
-                logger.warning(f"Circular reference detected for schema {schema_ref}")
+                log.debug(f"Circular reference detected for schema {schema_ref}")
                 return None
             visited.add(schema_ref)
 

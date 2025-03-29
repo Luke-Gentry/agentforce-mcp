@@ -27,9 +27,16 @@ servers:
     # Forward the API key from the client's query parameters
     paths:
     - /v1/forecast$
+    # Forward the Authorization header to the OpenAPI endpoint.
+    headers:
+        - Authorization
 ```
 
-Run it with:
+Run the server (if not already running):
+
+    uv run main.py
+
+Finally, run the example:
 
     uv run examples/langchain_client.py
 """
@@ -53,6 +60,10 @@ async def main():
             "weather": {
                 "url": "http://localhost:8000/weather/sse",
                 "transport": "sse",
+                # Add a custom header to the request that can be forwarded to the OpenAPI endpoint.
+                "headers": {
+                    "Authorization": "Test Authorization Header",
+                },
             },
             "httpbin": {
                 "url": "http://localhost:8000/httpbin/sse",

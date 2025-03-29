@@ -18,7 +18,7 @@ from mcp_openapi.file_watcher import ConfigFileHandler
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 async def main():
@@ -55,7 +55,7 @@ async def main():
         server = uvicorn.Server(config)
         await server.serve()
     except KeyboardInterrupt:
-        logger.info("Shutting down...")
+        log.info("Shutting down...")
         await server_manager.stop_servers()
         observer.stop()
         observer.join()
