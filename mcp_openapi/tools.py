@@ -2,7 +2,7 @@
 import inspect
 import types
 import re
-from typing import Any
+from typing import Any, Union
 
 # 3p
 from pydantic import BaseModel
@@ -13,7 +13,6 @@ from mcp_openapi import parser
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
-from typing import Union  # noqa: F401
 
 # Maximum number of characters to include in enum descriptions
 MAX_ENUM_DESCRIPTION_LENGTH = 100
@@ -72,35 +71,38 @@ class Tool(BaseModel):
         # can put it in the body of the request.
         if operation.request_body_ and operation.request_body_.schema_:
             for param in operation.request_body_.schema_.properties:
+                # Process both the parameter itself and any nested properties
+                params_to_process = [(f"j_{param.name}", param)]
                 if param.properties:
-                    for nested_param in param.properties:
-                        name = cls._to_python_arg(f"j_{nested_param.name}")
-                        if name in seen_params:
-                            continue
-
-                        tool_params.append(
-                            ToolParameter(
-                                name=name,
-                                type=cls._to_python_type(nested_param),
-                                description=nested_param.description,
-                                default="None",
+                    params_to_process = [
+                        (f"j_{nested_param.name}", nested_param)
+                        for nested_param in param.properties
+                    ]
+                if param.any_of:
+                    descriptions = []
+                    for any_of in param.any_of:
+                        if any_of.description:
+                            descriptions.append(any_of.description)
+                        elif any_of.properties:
+                            descriptions.append(
+                                f"Object with properties: {', '.join(p.name for p in any_of.properties)}"
                             )
-                        )
-                        seen_params.add(name)
-                else:
-                    name = cls._to_python_arg(f"j_{param.name}")
+                    param.description = f"One of: ({') OR ('.join(descriptions)})"
+                for name_prefix, p in params_to_process:
+                    name = cls._to_python_arg(name_prefix)
                     if name in seen_params:
                         continue
 
                     tool_params.append(
                         ToolParameter(
                             name=name,
-                            type=cls._to_python_type(param),
-                            description=param.description,
+                            type=cls._to_python_type(p),
+                            description=p.description,
                             default="None",
                         )
                     )
                     seen_params.add(name)
+
         return cls(
             name=cls._to_fn_name(operation.id),
             description=operation.summary,
@@ -148,9 +150,31 @@ class Tool(BaseModel):
         return name
 
     @classmethod
-    def _to_python_type(cls, param: parser.Parameter) -> str:
+    def _to_python_type(
+        cls, param: Union[parser.Parameter, parser.SchemaProperty]
+    ) -> str:
         py_type = "str"
-        if isinstance(param.type, list):
+        if (
+            isinstance(param, parser.Parameter)
+            and param.schema_
+            and "oneOf" in param.schema_
+        ):
+            # Handle oneOf types by creating a Union type
+            types = []
+            for schema in param.schema_["oneOf"]:
+                t = schema.get("type")
+                if t == "string":
+                    types.append("str")
+                elif t == "integer":
+                    types.append("int")
+                elif t == "number":
+                    types.append("float")
+                elif t == "boolean":
+                    types.append("bool")
+                else:
+                    types.append("Any")
+            return f"Union[{', '.join(types)}]"
+        elif isinstance(param.type, list):
             # Handle anyOf types by creating a Union type
             types = []
             for t in param.type:
@@ -174,7 +198,7 @@ class Tool(BaseModel):
         elif param.type == "boolean":
             py_type = "bool"
 
-        if param.name.endswith("[]"):
+        if hasattr(param, "name") and param.name.endswith("[]"):
             py_type = f"list[{py_type}]"
 
         return py_type
