@@ -469,7 +469,7 @@ def test_tool_from_operation(mock_operation):
     anyof_param = param_map["anyof_object_or_string"]
     assert anyof_param.type == "Union[Any, str]"
     assert (
-        "One of: (Object with properties: anyof_nested_string, anyof_nested_int) OR (A string parameter)"
+        "A union parameter that can be object or string, one of: (Object with properties: anyof_nested_string, anyof_nested_int) OR (A string parameter)"
         in anyof_param.description
     )
 

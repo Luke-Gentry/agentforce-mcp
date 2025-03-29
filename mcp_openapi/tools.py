@@ -70,13 +70,6 @@ class Tool(BaseModel):
         # can put it in the body of the request.
         if operation.request_body_ and operation.request_body_.schema_:
             for param in operation.request_body_.schema_.properties:
-                # Process both the parameter itself and any nested properties
-                params_to_process = [(param.name, param)]
-                if param.properties:
-                    params_to_process = [
-                        ("nested_param.name", nested_param)
-                        for nested_param in param.properties
-                    ]
                 if param.any_of:
                     descriptions = []
                     for any_of in param.any_of:
@@ -86,23 +79,24 @@ class Tool(BaseModel):
                             descriptions.append(
                                 f"Object with properties: {', '.join(p.name for p in any_of.properties)}"
                             )
-                    param.description = f"One of: ({') OR ('.join(descriptions)})"
-                for name_prefix, p in params_to_process:
-                    name = cls._to_python_arg(name_prefix)
-                    if name in seen_params:
-                        continue
-
+                        elif any_of.type:
+                            descriptions.append(any_of.type)
+                    description = (
+                        f"{param.description}, one of: ({') OR ('.join(descriptions)})"
+                    )
                     tool_params.append(
                         ToolParameter(
-                            name=name,
-                            type=cls._to_python_type(p),
-                            description=p.description,
+                            name=param.name,
+                            type=cls._to_python_type(param),
+                            description=description,
                             request_body=True,
                             default="None",
                         )
                     )
-                    seen_params.add(name)
-
+                    seen_params.add(param.name)
+                elif param.properties:
+                    # skipping multiple nested properties in tools for now.
+                    pass
         return cls(
             name=cls._to_fn_name(operation.id),
             description=operation.summary,
