@@ -111,14 +111,15 @@ class Config:
         file_path: str,
         path_patterns: list[str],
         base_path=pathlib.Path("").absolute(),
+        use_cache=True,
     ) -> "Config":
-        # Create cache key from file path and patterns
         cache_key = hashlib.md5(
             f"{file_path}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.pickle"
 
-        if cache_file.exists():
+        # Create cache key from file path and patterns
+        if use_cache and cache_file.exists():
             logger.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
@@ -138,14 +139,13 @@ class Config:
         return config
 
     @classmethod
-    def from_url(cls, url: str, path_patterns: list[str]) -> "Config":
-        # Create cache key from URL and patterns
+    def from_url(cls, url: str, path_patterns: list[str], use_cache=True) -> "Config":
         cache_key = hashlib.md5(
             f"{url}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.pickle"
 
-        if cache_file.exists():
+        if use_cache and cache_file.exists():
             logger.info(f"Loading cached OpenAPI spec from {cache_file}")
             with open(cache_file, "rb") as f:
                 return pickle.load(f)
@@ -513,24 +513,84 @@ class Config:
         def _repr_schema(schema: Schema, indent: str = "") -> str:
             """Helper function to format schema details recursively."""
             output = []
-            if schema.properties:
-                output.append(f"{indent}Properties:")
-                for prop in schema.properties:
-                    output.append(f"{indent}  - {prop.name}: {prop.type}")
-                    if prop.items:
-                        output.append(f"{indent}    Items: {prop.items.name}")
-                        if prop.items.properties:
-                            output.append(f"{indent}    Properties:")
-                            for item_prop in prop.items.properties:
+            # Handle regular properties
+            output.append(f"{indent}Properties:")
+            for prop in schema.properties:
+                output.append(f"{indent}  - {prop.name}: {prop.type}")
+                if prop.all_of:
+                    output.append(f"{indent}    All of:")
+                    for sub_schema in prop.all_of:
+                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        if sub_schema.properties:
+                            output.append(f"{indent}        Properties:")
+                            for prop in sub_schema.properties:
                                 output.append(
-                                    f"{indent}      - {item_prop.name}: {item_prop.type}"
+                                    f"{indent}          - {prop.name}: {prop.type}"
                                 )
-                    elif prop.properties:
+                                if prop.items:
+                                    output.append(
+                                        f"{indent}            Items: {prop.items.name}"
+                                    )
+                                    if prop.items.properties:
+                                        output.append(
+                                            f"{indent}              Properties:"
+                                        )
+                                        for item_prop in prop.items.properties:
+                                            output.append(
+                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                            )
+                        elif prop.properties:
+                            output.append(f"{indent}            Properties:")
+                            for nested_prop in prop.properties:
+                                output.append(
+                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                )
+                elif prop.any_of:
+                    if prop.name == "address":
+                        import pdb
+
+                        pdb.set_trace()
+                    output.append(f"{indent}    Any of:")
+                    for sub_schema in prop.any_of:
+                        output.append(f"{indent}      - Type: {sub_schema.type}")
+                        if sub_schema.properties:
+                            output.append(f"{indent}        Properties:")
+                            for prop in sub_schema.properties:
+                                output.append(
+                                    f"{indent}          - {prop.name}: {prop.type}"
+                                )
+                                if prop.items:
+                                    output.append(
+                                        f"{indent}            Items: {prop.items.name}"
+                                    )
+                                    if prop.items.properties:
+                                        output.append(
+                                            f"{indent}              Properties:"
+                                        )
+                                        for item_prop in prop.items.properties:
+                                            output.append(
+                                                f"{indent}                - {item_prop.name}: {item_prop.type}"
+                                            )
+                        elif prop.properties:
+                            output.append(f"{indent}            Properties:")
+                            for nested_prop in prop.properties:
+                                output.append(
+                                    f"{indent}              - {nested_prop.name}: {nested_prop.type}"
+                                )
+                elif prop.items:
+                    output.append(f"{indent}    Items: {prop.items.name}")
+                    if prop.items.properties:
                         output.append(f"{indent}    Properties:")
-                        for nested_prop in prop.properties:
+                        for item_prop in prop.items.properties:
                             output.append(
-                                f"{indent}      - {nested_prop.name}: {nested_prop.type}"
+                                f"{indent}      - {item_prop.name}: {item_prop.type}"
                             )
+                elif prop.properties:
+                    output.append(f"{indent}    Properties:")
+                    for nested_prop in prop.properties:
+                        output.append(
+                            f"{indent}      - {nested_prop.name}: {nested_prop.type}"
+                        )
 
             return "\n".join(output)
 
