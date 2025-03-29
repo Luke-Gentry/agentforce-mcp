@@ -1,10 +1,15 @@
+# stdlib
 import pytest
 from pathlib import Path
 import json
+
+# 3p
 from unittest.mock import AsyncMock, MagicMock
 from starlette.requests import Request
 from httpx import Response, AsyncClient
-from mcp_openapi.proxy import MCPProxy
+
+# local
+from mcp_openapi.proxy import MCPProxy, ProxySettings
 
 
 @pytest.fixture
@@ -88,7 +93,7 @@ async def test_proxy_params(proxy, mock_request, mock_httpx_client):
 async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
     """Test that only specified headers are forwarded."""
     # Set up recorder with specific headers to forward
-    proxy.forward_headers = ["authorization", "x-custom-header"]
+    proxy.settings = ProxySettings(forward_headers=["authorization", "x-custom-header"])
 
     url = "https://api.example.com/test"
 
@@ -115,6 +120,56 @@ async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
     # Check that a cassette file was created
     cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
     assert len(cassette_files) == 1
+
+
+@pytest.mark.asyncio
+async def test_proxy_forward_query_params(proxy, mock_request, mock_httpx_client):
+    """Test that only specified query parameters are forwarded."""
+    # Set up recorder with specific query parameters to forward
+    proxy.settings = ProxySettings(forward_query_params=["api_key", "appid"])
+
+    url = "https://api.example.com/test"
+    params = {
+        "api_key": "secret123",
+        "appid": "weather123",
+        "other_param": "should_not_forward",
+    }
+
+    response = await proxy.do_request(
+        request=mock_request,
+        method="GET",
+        url=url,
+        params=params,
+    )
+    assert response.status_code == 200
+    assert response.text == '{"test": "response"}'
+
+    # Verify the request was made with only the specified parameters
+    mock_httpx_client.request.assert_called_once_with(
+        method="GET",
+        url=url,
+        params={
+            "api_key": "secret123",
+            "appid": "weather123",
+        },
+        json=None,
+        headers={},
+    )
+
+    # Check that a cassette file was created
+    cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
+    assert len(cassette_files) == 1
+
+    # Verify the recorded data
+    with open(cassette_files[0]) as f:
+        recorded_data = json.load(f)
+
+    assert recorded_data["request"]["method"] == "GET"
+    assert recorded_data["request"]["url"] == url
+    assert recorded_data["request"]["params"] == {
+        "api_key": "secret123",
+        "appid": "weather123",
+    }
 
 
 @pytest.mark.asyncio

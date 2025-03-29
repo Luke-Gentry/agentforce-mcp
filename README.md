@@ -1,10 +1,10 @@
-# MCP OpenAPI Server
+# MCP-OpenAPI Server
 
 A server that exposes multiple OpenAPI endpoints through [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol), allowing hosted AI agents to interact with your APIs in a standardized way.
 
 ## What is this?
 
-MCP Server provides a bridge between AI models and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI models to discover and use your APIs with properly typed arguments and responses.
+The MCP-OpenAPI Server provides a bridge between AI models and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI models to discover and use your APIs with properly typed arguments and responses.
 
 ## Key Features
 
@@ -13,7 +13,7 @@ MCP Server provides a bridge between AI models and your existing APIs by exposin
   - Each route is available via SSE at `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`)
 - **Type Safety**: Provide strictly typed arguments to tools based on schemas (supporting both JSON body and query parameters)
 - **Multiple Schema Sources**: Support for JSON and YAML OpenAPI schemas from local files or remote URLs
-- **Multi-User Support**: Share the same MCP tools across multiple users with standard HTTP authentication
+- **Multi-User Support**: Share the same MCP tools across multiple users by forwarding headers or query parameters. See examples below.
 
 ## Why SSE Transport?
 
@@ -47,20 +47,21 @@ servers:
     paths:
       - /v1/customers$
 
-  - namespace: httpbin
-    name: httpbin
-    url: file://test-specs/httpbin.yaml
-    base_url: https://httpbin.org
+  - namespace: weather
+    name: OpenWeatherMap API
+    url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
+    base_url: https://api.openweathermap.org/data/2.5
+    # Forward the API key from the client's query parameters
+    query_params:
+      - appid
     paths:
-      - /get
-      - /status
-      - /ip
-      - /headers
-      - /user-agent
+      - /data/2.5/weather
 ```
 
 - You can point to either a remote URL or local file (using `file://`).
 - In `paths` you define Regular Expressions which will match the paths you want to expose.
+- Use `headers` to specify which HTTP headers to forward from the client request (e.g. "Authorization" headers)
+- Use `query_params` to specify which query parameters to forward from the client request (useful for API keys)
 
 _⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below_
 
@@ -220,3 +221,7 @@ The MCP inspector is also useful for seeing what's available.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+This project uses [aiopenapi3](https://github.com/commonism/aiopenapi3) for OpenAPI specification parsing and validation. Many thanks to the maintainers and contributors of that project for their excellent work.

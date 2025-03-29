@@ -1,6 +1,8 @@
 # stdlib
 import inspect
 import types
+import re
+from typing import Any
 
 # 3p
 from pydantic import BaseModel
@@ -11,12 +13,16 @@ from mcp_openapi import parser
 # Imports for the tool functions
 from pydantic import Field  # noqa: F401
 from mcp.server.fastmcp import Context  # noqa: F401
+from typing import Union  # noqa: F401
+
+# Maximum number of characters to include in enum descriptions
+MAX_ENUM_DESCRIPTION_LENGTH = 100
 
 
 class ToolParameter(BaseModel):
     name: str
     type: str
-    default: str | None = None
+    default: Any
     description: str | None = None
 
 
@@ -41,12 +47,23 @@ class Tool(BaseModel):
             if dedup_name in seen_params:
                 continue
 
+            # Build description with enum values if present
+            description = param.description.strip() if param.description else ""
+            if param.enum:
+                enum_desc = f" Options: {', '.join(str(e) for e in param.enum)}"
+                if len(enum_desc) > MAX_ENUM_DESCRIPTION_LENGTH:
+                    # Truncate to fit within max length
+                    enum_desc = (
+                        f" Options: {', '.join(str(e) for e in param.enum[:2])}..."
+                    )
+                description = f"{description}{enum_desc}".strip()
+
             tool_params.append(
                 ToolParameter(
                     name=cls._to_python_arg(param.name),
                     type=cls._to_python_type(param),
-                    description=param.description.strip(),
-                    default="None" if not param.required else None,
+                    description=description,
+                    default=param.default,
                 )
             )
             seen_params.add(dedup_name)
@@ -57,26 +74,35 @@ class Tool(BaseModel):
             for param in operation.request_body_.schema_.properties:
                 if param.properties:
                     for nested_param in param.properties:
+                        name = cls._to_python_arg(f"j_{nested_param.name}")
+                        if name in seen_params:
+                            continue
+
                         tool_params.append(
                             ToolParameter(
-                                name=cls._to_python_arg(f"j_{nested_param.name}"),
+                                name=name,
                                 type=cls._to_python_type(nested_param),
-                                description="",
+                                description=nested_param.description,
                                 default="None",
                             )
                         )
+                        seen_params.add(name)
                 else:
+                    name = cls._to_python_arg(f"j_{param.name}")
+                    if name in seen_params:
+                        continue
+
                     tool_params.append(
                         ToolParameter(
-                            name=cls._to_python_arg(f"j_{param.name}"),
+                            name=name,
                             type=cls._to_python_type(param),
-                            description="",
+                            description=param.description,
                             default="None",
                         )
                     )
-
+                    seen_params.add(name)
         return cls(
-            name=cls._to_snake_case(operation.id),
+            name=cls._to_fn_name(operation.id),
             description=operation.summary,
             parameters=tool_params,
             method=method_name,
@@ -107,6 +133,15 @@ class Tool(BaseModel):
         return name
 
     @classmethod
+    def _to_fn_name(cls, name: str) -> str:
+        name = cls._to_snake_case(name)
+        # replace invalid characters for a function name with a regex
+        name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        if name.startswith("_"):
+            name = name[1:]
+        return name
+
+    @classmethod
     def _to_python_arg(cls, name: str) -> str:
         if name.endswith("[]"):
             name = f"{name[:-2]}s"
@@ -115,7 +150,22 @@ class Tool(BaseModel):
     @classmethod
     def _to_python_type(cls, param: parser.Parameter) -> str:
         py_type = "str"
-        if param.type == "string":
+        if isinstance(param.type, list):
+            # Handle anyOf types by creating a Union type
+            types = []
+            for t in param.type:
+                if t == "string":
+                    types.append("str")
+                elif t == "integer":
+                    types.append("int")
+                elif t == "number":
+                    types.append("float")
+                elif t == "boolean":
+                    types.append("bool")
+                else:
+                    types.append("Any")
+            return f"Union[{', '.join(types)}]"
+        elif param.type == "string":
             py_type = "str"
         elif param.type == "integer":
             py_type = "int"
@@ -236,13 +286,15 @@ def create_tool_function_exec(tool):
     params = []
     for param in tool.parameters:
         param_str = f"{param.name}: {param.type}"
-        if param.description or param.default:
-            field_parts = []
-            if param.description:
-                field_parts.append(f'description="{param.description}"')
-            if param.default:
-                field_parts.append(f"default={param.default}")
-            param_str += f" = Field({', '.join(field_parts)})"
+        field_parts = []
+        if param.description:
+            field_parts.append(f'description="{param.description}"')
+        # Quote string defaults
+        default_value = (
+            f'"{param.default}"' if isinstance(param.default, str) else param.default
+        )
+        field_parts.append(f"default={default_value}")
+        param_str += f" = Field({', '.join(field_parts)})"
         params.append(param_str)
 
     # Build the function signature with explicit parameters

@@ -1,5 +1,10 @@
 import json
 import pytest
+import tempfile
+import yaml
+import os
+from pathlib import Path
+
 from mcp_openapi.parser import Config
 
 
@@ -292,6 +297,302 @@ def nasa_apod_spec():
     }
 
 
+@pytest.fixture
+def weather_api_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Weather API", "version": "1.0.0"},
+        "paths": {
+            "/v1/forecast": {
+                "get": {
+                    "operationId": "getForecast",
+                    "summary": "Get weather forecast",
+                    "parameters": [
+                        {
+                            "name": "temperature_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "celsius",
+                                "enum": ["celsius", "fahrenheit"],
+                            },
+                            "description": "Temperature unit",
+                        },
+                        {
+                            "name": "wind_speed_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "kmh",
+                                "enum": ["kmh", "ms", "mph", "kn"],
+                            },
+                            "description": "Wind speed unit",
+                        },
+                        {
+                            "name": "timeformat",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "iso8601",
+                                "enum": ["iso8601", "unixtime"],
+                            },
+                            "description": "Time format",
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "temperature": {"type": "number"},
+                                            "wind_speed": {"type": "number"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
+@pytest.fixture
+def form_encoded_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Form API", "version": "1.0.0"},
+        "paths": {
+            "/v1/customers": {
+                "post": {
+                    "operationId": "createCustomer",
+                    "summary": "Create a customer",
+                    "requestBody": {
+                        "content": {
+                            "application/x-www-form-urlencoded": {
+                                "encoding": {
+                                    "address": {"explode": True, "style": "deepObject"},
+                                    "metadata": {
+                                        "explode": True,
+                                        "style": "deepObject",
+                                    },
+                                },
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "maxLength": 256,
+                                            "description": "The customer's full name or business name.",
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "maxLength": 512,
+                                            "description": "Customer's email address",
+                                        },
+                                        "address": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "line1": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "city": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "country": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "The customer's address",
+                                        },
+                                        "metadata": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "additionalProperties": {
+                                                        "type": "string"
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "Set of key-value pairs",
+                                        },
+                                        "invoice_settings": {
+                                            "type": "object",
+                                            "properties": {
+                                                "custom_fields": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "maxLength": 40,
+                                                                    },
+                                                                    "value": {
+                                                                        "type": "string",
+                                                                        "maxLength": 140,
+                                                                    },
+                                                                },
+                                                                "required": [
+                                                                    "name",
+                                                                    "value",
+                                                                ],
+                                                            },
+                                                        },
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [""],
+                                                        },
+                                                    ]
+                                                }
+                                            },
+                                        },
+                                    },
+                                },
+                            }
+                        },
+                        "required": True,
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "name": {"type": "string"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
+@pytest.fixture
+def anyof_allof_spec():
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test": {
+                "post": {
+                    "operationId": "testEndpoint",
+                    "summary": "Test endpoint with anyOf and allOf",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "any_of_field": {
+                                            "anyOf": [
+                                                {"type": "string"},
+                                                {"type": "integer"},
+                                                {"type": "number"},
+                                                {"type": "boolean"},
+                                            ],
+                                            "description": "Field that can be multiple types",
+                                        },
+                                        "all_of_field": {
+                                            "allOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "name": {"type": "string"},
+                                                        "age": {"type": "integer"},
+                                                    },
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "email": {"type": "string"},
+                                                        "active": {"type": "boolean"},
+                                                    },
+                                                },
+                                            ],
+                                            "description": "Field that must satisfy all schemas",
+                                        },
+                                        "nested_any_of": {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "active",
+                                                                "inactive",
+                                                            ],
+                                                        },
+                                                        {
+                                                            "type": "integer",
+                                                            "enum": [1, 0],
+                                                        },
+                                                    ]
+                                                }
+                                            },
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "allOf": [
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "string"},
+                                                    "created_at": {"type": "string"},
+                                                },
+                                            },
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "status": {"type": "string"},
+                                                    "type": {"type": "string"},
+                                                },
+                                            },
+                                        ]
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
 def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     # Create a temporary OpenAPI spec file
     spec_file = tmp_path / "openapi.json"
@@ -475,3 +776,270 @@ def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
     success_response = get_op.responses["200"]
     assert success_response.format == "application/json"
     assert success_response.description == "successful operation"
+
+
+def test_parameter_enums_and_defaults(tmp_path, weather_api_spec):
+    spec_file = tmp_path / "weather_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(weather_api_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/v1/forecast"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test GET operation parameters
+    get_op = path.get
+    assert len(get_op.parameters) == 3
+
+    # Test temperature_unit parameter
+    temp_param = next(p for p in get_op.parameters if p.name == "temperature_unit")
+    assert temp_param.type == "string"
+    assert temp_param.enum == ["celsius", "fahrenheit"]
+    assert temp_param.default == "celsius"
+
+    # Test wind_speed_unit parameter
+    wind_param = next(p for p in get_op.parameters if p.name == "wind_speed_unit")
+    assert wind_param.type == "string"
+    assert wind_param.enum == ["kmh", "ms", "mph", "kn"]
+    assert wind_param.default == "kmh"
+
+    # Test timeformat parameter
+    time_param = next(p for p in get_op.parameters if p.name == "timeformat")
+    assert time_param.type == "string"
+    assert time_param.enum == ["iso8601", "unixtime"]
+    assert time_param.default == "iso8601"
+
+
+def test_form_encoded_request_body(tmp_path, form_encoded_spec):
+    spec_file = tmp_path / "form_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(form_encoded_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/v1/customers"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test POST operation
+    post_op = path.post
+    assert post_op.id == "createCustomer"
+    assert post_op.request_body_.required is True
+
+    # Test request body schema
+    request_schema = post_op.request_body_.schema_
+    assert len(request_schema.properties) == 5
+    assert {p.name for p in request_schema.properties} == {
+        "name",
+        "email",
+        "address",
+        "metadata",
+        "invoice_settings",
+    }
+
+    # Test encoding properties
+    encoding = post_op.request_body_.encoding
+    assert encoding is not None
+    assert "address" in encoding
+    assert "metadata" in encoding
+    assert encoding["address"]["explode"] is True
+    assert encoding["address"]["style"] == "deepObject"
+    assert encoding["metadata"]["explode"] is True
+    assert encoding["metadata"]["style"] == "deepObject"
+
+    # Test nested schema properties
+    address_prop = next(p for p in request_schema.properties if p.name == "address")
+    assert address_prop.type == ["object", "string"]  # anyOf types
+    assert address_prop.any_of is not None
+    assert len(address_prop.any_of) == 2
+    assert address_prop.any_of[0].type == "object"
+    assert address_prop.any_of[1].type == "string"
+
+    # Test metadata property with additionalProperties
+    metadata_prop = next(p for p in request_schema.properties if p.name == "metadata")
+    assert metadata_prop.type == ["object", "string"]  # anyOf types
+    assert metadata_prop.any_of is not None
+    assert len(metadata_prop.any_of) == 2
+
+    # Test invoice_settings with nested anyOf
+    invoice_settings = next(
+        p for p in request_schema.properties if p.name == "invoice_settings"
+    )
+    assert invoice_settings.type == "object"
+    assert len(invoice_settings.properties) == 1
+    custom_fields = invoice_settings.properties[0]
+    assert custom_fields.name == "custom_fields"
+    assert custom_fields.type == ["array", "string"]  # anyOf types
+    assert custom_fields.any_of is not None
+    assert len(custom_fields.any_of) == 2
+    assert custom_fields.any_of[0].type == "array"
+    assert custom_fields.any_of[1].type == "string"
+
+    # Test response schema
+    response = post_op.responses["200"]
+    assert response.format == "application/json"
+    response_schema = response.schema_
+    assert len(response_schema.properties) == 2
+    assert {p.name for p in response_schema.properties} == {"id", "name"}
+
+
+def test_circular_references():
+    """Test handling of circular references in OpenAPI schemas."""
+    # Create a test OpenAPI spec with circular references
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Person"}
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Person": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "spouse": {"$ref": "#/components/schemas/Person"},
+                        "children": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/Person"},
+                        },
+                    },
+                }
+            }
+        },
+    }
+
+    # Write the spec to a temporary file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(spec, f)
+        spec_path = f.name
+
+    try:
+        # Load the spec
+        config = Config.from_file(
+            spec_path, ["/test"], base_path=Path(spec_path).parent
+        )
+
+        # Verify that the circular references are handled gracefully
+        assert config.paths is not None
+        assert len(config.paths) == 1
+        path = config.paths[0]
+        assert path.get is not None
+        assert path.get.responses is not None
+        assert "200" in path.get.responses
+        response = path.get.responses["200"]
+        assert response.schema_ is not None
+
+        # The schema should have properties but not infinite recursion
+        schema = response.schema_
+        assert schema.properties is not None
+        assert len(schema.properties) > 0
+
+        # Find the spouse property
+        spouse_prop = next(p for p in schema.properties if p.name == "spouse")
+        assert spouse_prop.type == "object"
+        # The spouse property should not have infinite nested properties
+        assert spouse_prop.properties is None
+
+        # Find the children property
+        children_prop = next(p for p in schema.properties if p.name == "children")
+        assert children_prop.type == "array"
+        assert children_prop.items is not None
+        assert children_prop.items.type == "object"
+        # The items should not have infinite nested properties
+        # assert children_prop.items.properties is None
+
+    finally:
+        # Clean up the temporary file
+        os.unlink(spec_path)
+
+
+def test_anyof_allof_schemas(tmp_path, anyof_allof_spec):
+    spec_file = tmp_path / "anyof_allof_api.json"
+    with open(spec_file, "w") as f:
+        json.dump(anyof_allof_spec, f)
+
+    config = Config.from_file(str(spec_file), ["/test"], base_path=tmp_path)
+    assert len(config.paths) == 1
+    path = config.paths[0]
+
+    # Test POST operation
+    post_op = path.post
+    assert post_op.id == "testEndpoint"
+    assert post_op.request_body_.required is True
+
+    # Test request body schema
+    request_schema = post_op.request_body_.schema_
+    assert len(request_schema.properties) == 3
+    assert {p.name for p in request_schema.properties} == {
+        "any_of_field",
+        "all_of_field",
+        "nested_any_of",
+    }
+
+    # Test anyOf field
+    any_of_field = next(
+        p for p in request_schema.properties if p.name == "any_of_field"
+    )
+    assert any_of_field.type == ["string", "integer", "number", "boolean"]
+    assert any_of_field.any_of is not None
+    assert len(any_of_field.any_of) == 4
+    assert any_of_field.description == "Field that can be multiple types"
+
+    # Test allOf field
+    all_of_field = next(
+        p for p in request_schema.properties if p.name == "all_of_field"
+    )
+    assert all_of_field.type == "object"
+    assert all_of_field.all_of is not None
+    assert len(all_of_field.all_of) == 2
+    assert all_of_field.description == "Field that must satisfy all schemas"
+
+    # Verify merged properties from allOf
+    assert len(all_of_field.properties) == 4
+    assert {p.name for p in all_of_field.properties} == {
+        "name",
+        "age",
+        "email",
+        "active",
+    }
+
+    # Test nested anyOf
+    nested_any_of = next(
+        p for p in request_schema.properties if p.name == "nested_any_of"
+    )
+    assert nested_any_of.type == "object"
+    assert len(nested_any_of.properties) == 1
+    status_prop = nested_any_of.properties[0]
+    assert status_prop.name == "status"
+    assert status_prop.type == ["string", "integer"]
+    assert status_prop.any_of is not None
+    assert len(status_prop.any_of) == 2
+
+    # Test response schema with allOf
+    response = post_op.responses["200"]
+    assert response.format == "application/json"
+    response_schema = response.schema_
+    assert response_schema.properties[0].type == "object"
+    assert response_schema.properties[0].all_of is not None
+    assert len(response_schema.properties[0].all_of) == 2
+
+    # Verify merged properties from response allOf
+    assert len(response_schema.properties[0].properties) == 4
+    assert {p.name for p in response_schema.properties[0].properties} == {
+        "id",
+        "created_at",
+        "status",
+        "type",
+    }

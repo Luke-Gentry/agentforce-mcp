@@ -8,6 +8,8 @@ from pathlib import Path
 
 # 3p
 import aiopenapi3
+from aiopenapi3.plugin import Init, Document
+
 import pathlib
 from pydantic import BaseModel, Field
 
@@ -17,18 +19,15 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = Path.home() / ".mcp-openapi" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-"""
-
-- Only supporting inline properties, single reference or allOf
-- Not supporting oneOf, anyOf, not
-"""
-
 
 class SchemaProperty(BaseModel):
     name: str
-    type: str
+    type: str | list[str]  # Can be a single type or list of types for anyOf
     items: Optional["SchemaProperty"] = None
     properties: Optional[List["SchemaProperty"]] = None
+    description: Optional[str] = None
+    any_of: Optional[List["SchemaProperty"]] = None  # For anyOf schemas
+    all_of: Optional[List["SchemaProperty"]] = None  # For allOf schemas
 
 
 class Schema(BaseModel):
@@ -40,7 +39,7 @@ class Parameter(BaseModel):
     name: str
     in_: str = Field(alias="in")
     required: bool = False
-    schema_: Optional[Dict[str, Any]] = Field(default=None, alias="schema")
+    schema_: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
     deprecated: Optional[bool] = None
     allowEmptyValue: Optional[bool] = None
@@ -48,12 +47,14 @@ class Parameter(BaseModel):
     explode: Optional[bool] = None
     allowReserved: Optional[bool] = None
     type: Optional[str] = None
+    enum: Optional[List[Any]] = None
+    default: Optional[Any] = None
 
 
 class Response(BaseModel):
     description: str
     content: Optional[Dict[str, Any]] = None
-    schema_: Optional[Schema] = Field(default=None)
+    schema_: Optional[Schema] = None
     format: str = "text/plain"
 
 
@@ -61,7 +62,8 @@ class RequestBody(BaseModel):
     description: Optional[str] = None
     content: Optional[Dict[str, Any]] = None
     required: bool = False
-    schema_: Optional[Schema] = Field(default=None)
+    schema_: Optional[Schema] = None
+    encoding: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 class Operation(BaseModel):
@@ -69,7 +71,7 @@ class Operation(BaseModel):
     summary: Optional[str] = None
     description: Optional[str] = None
     parameters: List[Parameter] = []
-    request_body_: Optional[RequestBody] = Field(default=None)
+    request_body_: RequestBody | None = None
     responses: Dict[str, Response]
 
 
@@ -80,6 +82,31 @@ class Path(BaseModel):
     put: Optional[Operation] = None
     delete: Optional[Operation] = None
     patch: Optional[Operation] = None
+
+
+class SchemaSelector(Init):
+    """
+    remove the schemas we do not need models for
+    """
+
+    def __init__(self, *schemas):
+        super().__init__()
+        self._schemas = schemas
+
+    def schemas(self, ctx: "Init.Context") -> "Init.Context":
+        ctx.schemas = {
+            k: ctx.schemas[k] for k in (set(self._schemas) & set(ctx.schemas.keys()))
+        }
+        return ctx
+
+
+class RemovePaths(Document):
+    def parsed(self, ctx: "Document.Context") -> "Document.Context":
+        """
+        emtpy the paths - not needed
+        """
+        ctx.document["paths"] = {}
+        return ctx
 
 
 class Config:
@@ -174,11 +201,29 @@ class Config:
         self.paths = paths
 
     @classmethod
-    def _process_schema(cls, schema, api) -> Optional[Schema]:
+    def _process_schema(
+        cls, schema, api, depth=0, max_depth=10, visited=None
+    ) -> Optional[Schema]:
         """Process schema and return a Schema model."""
+        # Initialize visited set if None
+        if visited is None:
+            visited = set()
+
+        # Check depth limit
+        if depth >= max_depth:
+            logger.warning(f"Max depth {max_depth} reached, stopping recursion")
+            return None
+
+        # Track visited schemas to prevent cycles
+        if hasattr(schema, "ref"):
+            schema_ref = schema.ref
+            if schema_ref in visited:
+                logger.warning(f"Circular reference detected for schema {schema_ref}")
+                return None
+            visited.add(schema_ref)
+
         properties = []
         if hasattr(schema, "ref"):
-            # Extract the schema name from the reference
             schema_name = schema.ref.split("/")[-1]
             resolved_schema = api.components.schemas[schema_name]
         else:
@@ -186,14 +231,78 @@ class Config:
             resolved_schema = schema
 
         if resolved_schema.allOf:
-            for schema in resolved_schema.allOf:
-                properties.extend(cls._process_schema(schema, api).properties)
+            # For allOf, merge all schemas into one
+            all_properties = []
+            all_schemas = []
+            for sub_schema in resolved_schema.allOf:
+                sub_result = cls._process_schema(
+                    sub_schema, api, depth + 1, max_depth, visited
+                )
+                if sub_result:
+                    # Convert Schema to SchemaProperty for all_of
+                    all_schemas.append(
+                        SchemaProperty(
+                            name=sub_result.name,
+                            type="object",
+                            properties=sub_result.properties,
+                            description=sub_schema.description,
+                        )
+                    )
+                    if sub_result.properties:
+                        all_properties.extend(sub_result.properties)
+
+            # Create a single property that contains all merged properties
+            if all_properties:
+                return Schema(
+                    name=schema_name,
+                    properties=[
+                        SchemaProperty(
+                            name="merged",
+                            type="object",
+                            properties=all_properties,
+                            description=resolved_schema.description,
+                            all_of=all_schemas,
+                        )
+                    ],
+                )
+            return None
+
+        elif resolved_schema.anyOf:
+            # For anyOf, create a property that can be any of the types
+            any_of_properties = []
+            types = []
+            for sub_schema in resolved_schema.anyOf:
+                if sub_schema.type:
+                    types.append(sub_schema.type)
+                sub_result = cls._process_schema(
+                    sub_schema, api, depth + 1, max_depth, visited
+                )
+                if sub_result and sub_result.properties:
+                    any_of_properties.extend(sub_result.properties)
+
+            # Create a property with the union type, even if there are no properties
+            return Schema(
+                name=schema_name,
+                properties=[
+                    SchemaProperty(
+                        name="union",
+                        type=types if types else "object",
+                        properties=any_of_properties if any_of_properties else None,
+                        description=resolved_schema.description,
+                        any_of=any_of_properties if any_of_properties else None,
+                    )
+                ],
+            )
+
         elif resolved_schema.properties:
             for prop_name, prop_schema in resolved_schema.properties.items():
+                # Get the type from the schema, defaulting to "object" if not specified
                 prop_type = prop_schema.type or "object"
-                prop = SchemaProperty(name=prop_name, type=prop_type)
+                prop = SchemaProperty(
+                    name=prop_name, type=prop_type, description=prop_schema.description
+                )
 
-                if prop_type == "array" and hasattr(prop_schema, "items"):
+                if prop_type == "array" and prop_schema.items:
                     item_schema = prop_schema.items
                     if hasattr(item_schema, "ref"):
                         item_name = item_schema.ref.split("/")[-1]
@@ -206,11 +315,17 @@ class Config:
                             ) in resolved_item_schema.properties.items():
                                 item_prop_type = item_prop_schema.type or "object"
                                 item_prop = SchemaProperty(
-                                    name=item_prop_name, type=item_prop_type
+                                    name=item_prop_name,
+                                    type=item_prop_type,
+                                    description=item_prop_schema.description,
                                 )
                                 if item_prop_type == "object":
                                     nested_schema = cls._process_schema(
-                                        item_prop_schema, api
+                                        item_prop_schema,
+                                        api,
+                                        depth + 1,
+                                        max_depth,
+                                        visited,
                                     )
                                     if nested_schema:
                                         item_prop.properties = nested_schema.properties
@@ -219,48 +334,143 @@ class Config:
                                 name=item_name,
                                 type="object",
                                 properties=item_properties,
+                                description=item_schema.description,
                             )
                     else:
+                        item_type = item_schema.type or "object"
                         prop.items = SchemaProperty(
-                            name="item", type=item_schema.type or "object"
+                            name="item",
+                            type=item_type,
+                            description=item_schema.description,
                         )
 
                 elif prop_type == "object":
                     if hasattr(prop_schema, "ref"):
-                        nested_schema = cls._process_schema(prop_schema, api)
+                        nested_schema = cls._process_schema(
+                            prop_schema, api, depth + 1, max_depth, visited
+                        )
                         if nested_schema:
                             prop.properties = nested_schema.properties
+                    elif prop_schema.anyOf:
+                        # Handle anyOf in object properties
+                        types = []
+                        any_of_schemas = []
+                        for schema in prop_schema.anyOf:
+                            if schema.type:
+                                types.append(schema.type)
+                            result = cls._process_schema(
+                                schema, api, depth + 1, max_depth, visited
+                            )
+                            if result:
+                                # Convert Schema to SchemaProperty for any_of
+                                any_of_schemas.append(
+                                    SchemaProperty(
+                                        name=result.name,
+                                        type=schema.type
+                                        or "object",  # Use the schema's type
+                                        properties=result.properties,
+                                        description=schema.description,
+                                    )
+                                )
+
+                        prop.type = types if types else "object"
+                        prop.any_of = any_of_schemas
+                        # For anyOf in object properties, we don't merge properties
+                        prop.properties = None
+                    elif prop_schema.allOf:
+                        # Handle allOf in object properties
+                        all_properties = []
+                        all_schemas = []
+                        for schema in prop_schema.allOf:
+                            result = cls._process_schema(
+                                schema, api, depth + 1, max_depth, visited
+                            )
+                            if result:
+                                # Convert Schema to SchemaProperty for all_of
+                                all_schemas.append(
+                                    SchemaProperty(
+                                        name=result.name,
+                                        type="object",
+                                        properties=result.properties,
+                                        description=schema.description,
+                                    )
+                                )
+                                if result.properties:
+                                    all_properties.extend(result.properties)
+                        if all_properties:
+                            prop.properties = all_properties
+                            prop.all_of = all_schemas
+                    elif prop_schema.additionalProperties:
+                        # For additionalProperties, we don't set properties
+                        prop.properties = None
                     else:
                         nested_properties = []
                         for (
                             nested_name,
                             nested_schema,
                         ) in prop_schema.properties.items():
-                            nested_prop = SchemaProperty(
-                                name=nested_name, type=nested_schema.type
-                            )
-                            if nested_schema.type == "object":
-                                nested_schema_result = cls._process_schema(
-                                    nested_schema, api
-                                )
-                                if nested_schema_result:
-                                    nested_prop.properties = (
-                                        nested_schema_result.properties
+                            if nested_schema.anyOf:
+                                # Handle anyOf in nested properties
+                                types = []
+                                any_of_schemas = []
+                                for schema in nested_schema.anyOf:
+                                    if schema.type:
+                                        types.append(schema.type)
+                                    result = cls._process_schema(
+                                        schema, api, depth + 1, max_depth, visited
                                     )
-                            nested_properties.append(nested_prop)
+                                    if result:
+                                        # Convert Schema to SchemaProperty for any_of
+                                        any_of_schemas.append(
+                                            SchemaProperty(
+                                                name=result.name,
+                                                type=schema.type
+                                                or "object",  # Use the schema's type
+                                                properties=result.properties,
+                                                description=schema.description,
+                                            )
+                                        )
+                                nested_prop = SchemaProperty(
+                                    name=nested_name,
+                                    type=types if types else "object",
+                                    description=nested_schema.description,
+                                    any_of=any_of_schemas,
+                                )
+                                nested_properties.append(nested_prop)
+                            else:
+                                nested_schema = cls._process_schema(
+                                    nested_schema, api, depth + 1, max_depth, visited
+                                )
+                                if nested_schema and nested_schema.properties:
+                                    nested_prop = nested_schema.properties[0]
+                                    nested_prop.name = nested_name
+                                    nested_properties.append(nested_prop)
+
+                        prop.properties = nested_properties
 
                 properties.append(prop)
         elif resolved_schema.type == "array":
+            # Add null check for items
+            if not resolved_schema.items:
+                return Schema(name=schema_name, properties=[])
+
+            processed_items = cls._process_schema(
+                resolved_schema.items, api, depth + 1, max_depth, visited
+            )
+
+            if not processed_items:
+                return Schema(name=schema_name, properties=[])
+
             properties.append(
                 SchemaProperty(
                     name="inline",
                     type="array",
+                    description=resolved_schema.description,
                     items=SchemaProperty(
                         name="item",
                         type=resolved_schema.items.type or "object",
-                        properties=cls._process_schema(
-                            resolved_schema.items, api
-                        ).properties,
+                        properties=processed_items.properties,
+                        description=resolved_schema.items.description,
                     ),
                 )
             )
@@ -285,8 +495,15 @@ class Config:
                 "explode": getattr(param, "explode", None),
                 "allowReserved": getattr(param, "allowReserved", None),
                 "type": param.schema_.type,
-                # TODO: Need to handle other types?
             }
+
+            # Add enum and default if they exist in the schema
+            if param.schema_.enum:
+                param_dict["enum"] = param.schema_.enum
+                param_dict["required"] = True
+            if param.schema_.default:
+                param_dict["default"] = param.schema_.default
+
             processed_params.append(Parameter(**param_dict))
 
         processed_responses = {}
@@ -309,7 +526,34 @@ class Config:
         request_body = None
         if operation.requestBody:
             schema = None
+            encoding = None
+            content_type = None
+
+            # Handle form-encoded content
             if (
+                operation.requestBody.content
+                and "application/x-www-form-urlencoded" in operation.requestBody.content
+            ):
+                content = operation.requestBody.content[
+                    "application/x-www-form-urlencoded"
+                ]
+                if content.schema_:
+                    schema = cls._process_schema(content.schema_, api)
+                if content.encoding:
+                    # Convert encoding object to dictionary
+                    encoding = {}
+                    for field_name, encoding_obj in content.encoding.items():
+                        encoding[field_name] = {
+                            "explode": getattr(encoding_obj, "explode", None),
+                            "style": getattr(encoding_obj, "style", None),
+                            "allowReserved": getattr(
+                                encoding_obj, "allowReserved", None
+                            ),
+                            "contentType": getattr(encoding_obj, "contentType", None),
+                        }
+                content_type = "application/x-www-form-urlencoded"
+            # Handle JSON content
+            elif (
                 operation.requestBody.content
                 and "application/json" in operation.requestBody.content
             ):
@@ -317,12 +561,14 @@ class Config:
                     "application/json"
                 ].schema_
                 schema = cls._process_schema(content_schema, api)
+                content_type = "application/json"
 
             request_body = RequestBody(
                 description=getattr(operation.requestBody, "description", None),
-                content=getattr(operation.requestBody, "content", None),
+                content=operation.requestBody.content,
                 required=bool(getattr(operation.requestBody, "required", False)),
                 schema_=schema,
+                encoding=encoding,
             )
 
         return Operation(
