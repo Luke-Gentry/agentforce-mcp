@@ -1,12 +1,22 @@
 # MCP-OpenAPI Server
 
-A server that exposes OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol) for use with cloud-based agents.
+MCP-OpenAPI Server is a bridge that enables AI agents to discover and interact with your existing API endpoints through the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol). By exposing OpenAPI-defined services as MCP tools with proper typing, authentication, and selective endpoint exposure, it simplifies integration between cloud-based AI agents and external services without requiring custom tool development.
 
-The MCP-OpenAPI Server provides a bridge between AI agents and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI agents to discover and use external APIs with properly typed arguments and responses.
+While many MCP implementations rely on stdiofor local integrations and command-line tools, this project focuses on SSE transport to enable a multi-tenant server-side architecture.
+
+## Who is This For?
+
+- **API Providers**: Easily expose your OpenAPI services to AI agents without rebuilding APIs or creating custom MCP tools. Perfect for SaaS companies wanting to enable AI integration with their platform.
+
+- **AI Agent Developers**: Connect your server-side agents to multiple external services with properly typed arguments. Ideal for building assistants that can seamlessly interact with systems like Zendesk, Stripe, and other APIs.
+
+- **Enterprise Integration Teams**: Create standardized access patterns for AI agents to interact with your internal systems while maintaining proper authentication and permissions.
+
+- **Prototype Developers**: Quickly test AI-API interactions before investing in a dedicated MCP implementation, helping identify improvements to your API structure and documentation.
 
 ## Key Features
 
-- **SSE Transport**: This server leverages the SSE transport for MCP so it works well for multiple agent clients.
+- **SSE Transport**: This server leverages the SSE transport for MCP (rather than Stdio) so it works well for multiple agent clients.
   - Each OpenAPI server is available at a separate route `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`).
 - **Selective Route Exposure**: Expose only the routes/tools you want for your agents to be aware of, using a regex on the route.
 - **Authentication Forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers and/or query parameters.
@@ -110,6 +120,12 @@ The project includes two example clients that demonstrate different ways to inte
 
 - **[Low-Level Client](client-examples/low_level_client.py))**: This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
 - **[LangChain Integration](client-examples/langchain_client.py)**: This example shows how to integrate the MCP-OpenAPI server with LangChain (using the [langchain-mcp-adapters](https://github.com/langchain-ai/langchain-mcp-adapters)), allowing AI agents to use these APIs through LangChain's tool system.
+
+## Limitations
+
+- **Schema Complexity**: We currently have limited support for deeply nested types in schemas. Additional type support can be added based on needs.
+
+- **Context Window Usage**: Endpoints with many parameters may consume significant space in the AI model's context window. Be selective about which endpoints you expose to balance functionality and efficiency.
 
 ## Tool Inspection
 
