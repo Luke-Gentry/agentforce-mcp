@@ -1,12 +1,16 @@
 import inspect
 from unittest.mock import AsyncMock, patch
-
 import pytest
+import tempfile
+import json
+import os
+from pathlib import Path
 
 from mcp_openapi.tools import (
     Tool,
     ToolParameter,
     create_tool_function_exec,
+    tools_from_spec,
 )
 from mcp_openapi.proxy import MCPProxy
 from mcp_openapi.parser import (
@@ -14,6 +18,7 @@ from mcp_openapi.parser import (
     Parameter,
     RequestBody,
     Schema,
+    Spec,
 )
 
 from starlette.requests import Request
@@ -475,8 +480,6 @@ def test_tool_from_operation(mock_operation):
 
 def test_tool_from_operation_with_long_enum():
     """Test Tool.from_operation with a long enum list that should be truncated"""
-    from mcp_openapi.parser import Operation, Parameter, RequestBody, Schema
-
     # Create a long enum list
     long_enum = [f"option{i}" for i in range(20)]  # Make it longer to ensure truncation
 
@@ -512,3 +515,352 @@ def test_tool_from_operation_with_long_enum():
         "..."
     )  # Should end with ellipsis due to truncation
     assert len(param.description) <= 100  # MAX_ENUM_DESCRIPTION_LENGTH
+
+
+def test_end_to_end_weather_api():
+    """Test the complete flow from OpenAPI JSON to tools using the weather API spec"""
+    # Weather API spec from test_parser.py
+    weather_api_spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Weather API", "version": "1.0.0"},
+        "paths": {
+            "/v1/forecast": {
+                "get": {
+                    "operationId": "getForecast",
+                    "summary": "Get weather forecast",
+                    "parameters": [
+                        {
+                            "name": "temperature_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "celsius",
+                                "enum": ["celsius", "fahrenheit"],
+                            },
+                            "description": "Temperature unit",
+                        },
+                        {
+                            "name": "wind_speed_unit",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "kmh",
+                                "enum": ["kmh", "ms", "mph", "kn"],
+                            },
+                            "description": "Wind speed unit",
+                        },
+                        {
+                            "name": "timeformat",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "default": "iso8601",
+                                "enum": ["iso8601", "unixtime"],
+                            },
+                            "description": "Time format",
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "temperature": {"type": "number"},
+                                            "wind_speed": {"type": "number"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    # Write the spec to a temporary file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(weather_api_spec, f)
+        spec_path = f.name
+
+    try:
+        spec = Spec.from_file(
+            spec_path, ["/v1/forecast"], base_path=Path(spec_path).parent
+        )
+
+        tools = tools_from_spec(spec, [])
+
+        # Verify we got exactly one tool
+        assert len(tools) == 1
+        tool = tools[0]
+
+        assert tool.name == "get_forecast"
+        assert tool.description == "Get weather forecast"
+        assert tool.method == "GET"
+        assert tool.path == "/v1/forecast"
+
+        assert len(tool.parameters) == 3
+        param_map = {p.name: p for p in tool.parameters}
+
+        temp_param = param_map["temperature_unit"]
+        assert temp_param.type == "str"
+        assert temp_param.default == "celsius"
+        assert "Options: celsius, fahrenheit" in temp_param.description
+
+        wind_param = param_map["wind_speed_unit"]
+        assert wind_param.type == "str"
+        assert wind_param.default == "kmh"
+        assert "Options: kmh, ms, mph, kn" in wind_param.description
+
+        time_param = param_map["timeformat"]
+        assert time_param.type == "str"
+        assert time_param.default == "iso8601"
+        assert "Options: iso8601, unixtime" in time_param.description
+
+        tool_func = create_tool_function_exec(tool)
+
+        sig = inspect.signature(tool_func)
+        assert len(sig.parameters) == 4  # ctx + 3 parameters
+
+        # Verify parameter types and defaults
+        temp_param = sig.parameters["temperature_unit"]
+        assert (
+            str(temp_param)
+            == "temperature_unit: str = FieldInfo(annotation=NoneType, required=False, default='celsius', description='Temperature unit Options: celsius, fahrenheit')"
+        )
+
+        wind_param = sig.parameters["wind_speed_unit"]
+        assert (
+            str(wind_param)
+            == "wind_speed_unit: str = FieldInfo(annotation=NoneType, required=False, default='kmh', description='Wind speed unit Options: kmh, ms, mph, kn')"
+        )
+
+        time_param = sig.parameters["timeformat"]
+        assert (
+            str(time_param)
+            == "timeformat: str = FieldInfo(annotation=NoneType, required=False, default='iso8601', description='Time format Options: iso8601, unixtime')"
+        )
+
+    finally:
+        # Clean up the temporary file
+        os.unlink(spec_path)
+
+
+def test_end_to_end_form_encoded_api():
+    """Test the complete flow from OpenAPI JSON to tools using a complex form-encoded API spec"""
+    # Form-encoded API spec with complex request body
+    form_encoded_spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Form API", "version": "1.0.0"},
+        "paths": {
+            "/v1/customers": {
+                "post": {
+                    "operationId": "createCustomer",
+                    "summary": "Create a customer",
+                    "requestBody": {
+                        "content": {
+                            "application/x-www-form-urlencoded": {
+                                "encoding": {
+                                    "address": {"explode": True, "style": "deepObject"},
+                                    "metadata": {
+                                        "explode": True,
+                                        "style": "deepObject",
+                                    },
+                                },
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "maxLength": 256,
+                                            "description": "The customer's full name or business name.",
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "maxLength": 512,
+                                            "description": "Customer's email address",
+                                        },
+                                        "address": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "line1": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "city": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                        "country": {
+                                                            "type": "string",
+                                                            "maxLength": 5000,
+                                                        },
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "The customer's address",
+                                        },
+                                        "metadata": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "additionalProperties": {
+                                                        "type": "string"
+                                                    },
+                                                },
+                                                {"type": "string", "enum": [""]},
+                                            ],
+                                            "description": "Set of key-value pairs",
+                                        },
+                                        "invoice_settings": {
+                                            "type": "object",
+                                            "properties": {
+                                                "custom_fields": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "maxLength": 40,
+                                                                    },
+                                                                    "value": {
+                                                                        "type": "string",
+                                                                        "maxLength": 140,
+                                                                    },
+                                                                },
+                                                                "required": [
+                                                                    "name",
+                                                                    "value",
+                                                                ],
+                                                            },
+                                                        },
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [""],
+                                                        },
+                                                    ],
+                                                }
+                                            },
+                                        },
+                                    },
+                                },
+                            }
+                        },
+                        "required": True,
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "name": {"type": "string"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    # Write the spec to a temporary file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(form_encoded_spec, f)
+        spec_path = f.name
+
+    try:
+        spec = Spec.from_file(
+            spec_path, ["/v1/customers"], base_path=Path(spec_path).parent
+        )
+
+        tools = tools_from_spec(spec, [])
+
+        # Verify we got exactly one tool
+        assert len(tools) == 1
+        tool = tools[0]
+
+        # Verify basic tool properties
+        assert tool.name == "create_customer"
+        assert tool.description == "Create a customer"
+        assert tool.method == "POST"
+        assert tool.path == "/v1/customers"
+
+        # Verify parameters
+        assert (
+            len(tool.parameters) == 4
+        )  # name, email, address, metadata (invoice_settings is skipped as it's a nested object)
+        param_map = {p.name: p for p in tool.parameters}
+
+        # Test basic string parameters
+        name_param = param_map["name"]
+        assert name_param.type == "str"
+        assert name_param.description == "The customer's full name or business name."
+        assert name_param.request_body is True
+
+        email_param = param_map["email"]
+        assert email_param.type == "str"
+        assert email_param.description == "Customer's email address"
+        assert email_param.request_body is True
+
+        # Test address parameter with anyOf
+        address_param = param_map["address"]
+        assert address_param.type == "Union[Any, str]"
+        assert "The customer's address" in address_param.description
+        assert (
+            "Object with properties: line1, city, country" in address_param.description
+        )
+        assert address_param.request_body is True
+
+        # Test metadata parameter with anyOf and additionalProperties
+        metadata_param = param_map["metadata"]
+        assert metadata_param.type == "Union[Any, str]"
+        assert "Set of key-value pairs" in metadata_param.description
+        assert metadata_param.request_body is True
+
+        # Create the tool function
+        tool_func = create_tool_function_exec(tool)
+
+        # Verify the function signature
+        sig = inspect.signature(tool_func)
+        assert len(sig.parameters) == 5  # ctx + 4 parameters
+
+        # Verify parameter types and descriptions
+        name_param = sig.parameters["name"]
+        assert (
+            str(name_param)
+            == "name: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"The customer's full name or business name.\")"
+        )
+
+        email_param = sig.parameters["email"]
+        assert (
+            str(email_param)
+            == "email: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"Customer's email address\")"
+        )
+
+        address_param = sig.parameters["address"]
+        assert "Union[Any, str]" in str(address_param)
+        assert "The customer's address" in str(address_param)
+        assert "Object with properties: line1, city, country" in str(address_param)
+
+        metadata_param = sig.parameters["metadata"]
+        assert "Union[Any, str]" in str(metadata_param)
+        assert "Set of key-value pairs" in str(metadata_param)
+
+    finally:
+        # Clean up the temporary file
+        os.unlink(spec_path)

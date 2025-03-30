@@ -41,11 +41,11 @@ class Tool(BaseModel):
     ) -> "Tool":
         exclude_params = exclude_params or []
 
-        # Ensure array types come first with reversed sorting,
-        # so we always pick the array name + type over the regular.
         seen_params = set()
         tool_params = []
 
+        # Ensure array types come first with reversed sorting,
+        # so we always pick the array name + type over the regular.
         for param in reversed(sorted(operation.parameters, key=lambda x: x.name)):
             dedup_name = cls._to_dedupe_name(param.name)
             if dedup_name in seen_params:
@@ -106,6 +106,16 @@ class Tool(BaseModel):
                 elif param.properties:
                     # skipping multiple nested properties in tools for now.
                     pass
+                else:
+                    tool_params.append(
+                        ToolParameter(
+                            name=param.name,
+                            type=cls._to_python_type(param),
+                            description=param.description,
+                            default="None",
+                            request_body=True,
+                        )
+                    )
         return cls(
             name=cls._to_fn_name(operation.id),
             description=operation.summary or operation.description or "",
