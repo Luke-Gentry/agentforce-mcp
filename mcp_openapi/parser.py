@@ -110,7 +110,7 @@ class RemovePaths(Document):
         return ctx
 
 
-class Config:
+class Spec:
     @classmethod
     def from_file(
         cls,
@@ -118,7 +118,7 @@ class Config:
         path_patterns: list[str],
         base_path=pathlib.Path("").absolute(),
         use_cache=True,
-    ) -> "Config":
+    ) -> "Spec":
         cache_key = hashlib.md5(
             f"{file_path}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
@@ -138,16 +138,16 @@ class Config:
             loader=aiopenapi3.FileSystemLoader(base_path),
             plugins=[FilterPaths(path_patterns)],
         )
-        config = cls._from_api(api, path_patterns)
+        spec = cls._from_api(api, path_patterns)
 
         # Cache the result
         with open(cache_file, "wb") as f:
-            pickle.dump(config, f)
+            pickle.dump(spec, f)
 
-        return config
+        return spec
 
     @classmethod
-    def from_url(cls, url: str, path_patterns: list[str], use_cache=True) -> "Config":
+    def from_url(cls, url: str, path_patterns: list[str], use_cache=True) -> "Spec":
         cache_key = hashlib.md5(
             f"{url}:{','.join(sorted(path_patterns))}".encode()
         ).hexdigest()
@@ -164,16 +164,16 @@ class Config:
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
             plugins=[RemovePaths(), FilterPaths(path_patterns)],
         )
-        config = cls._from_api(api, path_patterns)
+        spec = cls._from_api(api, path_patterns)
 
         # Cache the result
         with open(cache_file, "wb") as f:
-            pickle.dump(config, f)
+            pickle.dump(spec, f)
 
-        return config
+        return spec
 
     @classmethod
-    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]) -> "Config":
+    def _from_api(cls, api: aiopenapi3.OpenAPI, path_patterns: list[str]) -> "Spec":
         paths = []
 
         compiled_patterns = [re.compile(pattern) for pattern in path_patterns]

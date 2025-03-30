@@ -13,9 +13,9 @@ from starlette.responses import JSONResponse
 from mcp.server.fastmcp import FastMCP
 
 # project
-from mcp_openapi.parser import Config
+from mcp_openapi.parser import Spec
 from mcp_openapi.tools import (
-    tools_from_config,
+    tools_from_spec,
     Tool,
     create_tool_function_exec,
 )
@@ -98,10 +98,10 @@ class ServerManager:
         log.info(f"Starting server for {name} ({namespace})")
 
         try:
-            config = (
-                Config.from_file(url[7:], paths)
+            spec = (
+                Spec.from_file(url[7:], paths)
                 if url.startswith("file://")
-                else Config.from_url(url, paths)
+                else Spec.from_url(url, paths)
             )
 
             @dataclass
@@ -129,7 +129,7 @@ class ServerManager:
                 message_path=f"/{namespace}/messages/",
             )
 
-            tools = tools_from_config(config, forward_query_params.keys())
+            tools = tools_from_spec(spec, forward_query_params.keys())
             self.tools[namespace] = tools
 
             for tool in tools:

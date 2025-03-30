@@ -450,7 +450,6 @@ def test_tool_from_operation(mock_operation):
 
     # Test parameter types and conversions
     param_map = {p.name: p for p in tool.parameters}
-    print(param_map.keys())
 
     # Test basic type conversions
     assert param_map["string_param"].type == "str"

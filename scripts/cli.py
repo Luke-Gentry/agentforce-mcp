@@ -2,8 +2,8 @@
 
 import argparse
 
-from mcp_openapi.parser import Config
-from mcp_openapi.tools import tools_from_config
+from mcp_openapi.parser import Spec
+from mcp_openapi.tools import tools_from_spec
 
 
 def parse_command(args: argparse.Namespace) -> None:
@@ -17,15 +17,15 @@ def parse_command(args: argparse.Namespace) -> None:
         return
 
     if args.file:
-        config = Config.from_file(
+        spec = Spec.from_file(
             args.file,
             args.routes,
             use_cache=False,
         )
     else:
-        config = Config.from_url(args.url, args.routes, use_cache=False)
+        spec = Spec.from_url(args.url, args.routes, use_cache=False)
 
-    print(config)
+    print(spec)
 
 
 def tools_command(args: argparse.Namespace) -> None:
@@ -39,15 +39,15 @@ def tools_command(args: argparse.Namespace) -> None:
         return
 
     if args.file:
-        config = Config.from_file(
+        spec = Spec.from_file(
             args.file,
             args.routes,
             use_cache=False,
         )
     else:
-        config = Config.from_url(args.url, args.routes, use_cache=False)
+        spec = Spec.from_url(args.url, args.routes, use_cache=False)
 
-    tools = tools_from_config(config, args.forward_query_params)
+    tools = tools_from_spec(spec, args.forward_query_params)
     for tool in tools:
         print(f"\nTool: {tool.name}")
         print(f"Description: {tool.description}")

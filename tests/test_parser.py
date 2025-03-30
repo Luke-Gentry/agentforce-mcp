@@ -5,7 +5,7 @@ import yaml
 import os
 from pathlib import Path
 
-from mcp_openapi.parser import Config, Schema, RequestBody
+from mcp_openapi.parser import Spec, Schema, RequestBody
 
 
 @pytest.fixture
@@ -663,12 +663,12 @@ def test_path_pattern_matching(tmp_path, sample_openapi_spec):
         json.dump(sample_openapi_spec, f)
 
     # Test exact path matching
-    config = Config.from_file(str(spec_file), ["/api/v1/users$"], base_path=tmp_path)
-    assert len(config.paths) == 1
-    assert config.paths[0].path == "/api/v1/users"
+    spec = Spec.from_file(str(spec_file), ["/api/v1/users$"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    assert spec.paths[0].path == "/api/v1/users"
 
     # Verify GET operation details
-    get_op = config.paths[0].get
+    get_op = spec.paths[0].get
     assert get_op.id == "getUsers"
     assert get_op.summary == "Get all users"
     assert len(get_op.parameters) == 1
@@ -677,14 +677,12 @@ def test_path_pattern_matching(tmp_path, sample_openapi_spec):
     assert get_op.parameters[0].type == "integer"
 
     # Test regex pattern matching for path parameters
-    config = Config.from_file(
-        str(spec_file), [r"/api/v1/users/\{.*\}"], base_path=tmp_path
-    )
-    assert len(config.paths) == 1
-    assert config.paths[0].path == "/api/v1/users/{userId}"
+    spec = Spec.from_file(str(spec_file), [r"/api/v1/users/\{.*\}"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    assert spec.paths[0].path == "/api/v1/users/{userId}"
 
     # Verify path parameter operation
-    get_op = config.paths[0].get
+    get_op = spec.paths[0].get
     assert get_op.id == "getUser"
     assert get_op.parameters[0].name == "userId"
     assert get_op.parameters[0].in_ == "path"
@@ -696,9 +694,9 @@ def test_request_response_processing(tmp_path, sample_openapi_spec):
     with open(spec_file, "w") as f:
         json.dump(sample_openapi_spec, f)
 
-    config = Config.from_file(str(spec_file), ["/api/v1/users"], base_path=tmp_path)
-    assert len(config.paths) == 2
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), ["/api/v1/users"], base_path=tmp_path)
+    assert len(spec.paths) == 2
+    path = spec.paths[0]
 
     # Test GET response schema
     get_response = path.get.responses["200"]
@@ -732,16 +730,16 @@ def test_multiple_path_patterns(tmp_path, sample_openapi_spec):
         json.dump(sample_openapi_spec, f)
 
     # Test matching multiple patterns
-    config = Config.from_file(
+    spec = Spec.from_file(
         str(spec_file), [r"/api/v1/users", r"/api/v1/users/\{.*\}"], base_path=tmp_path
     )
-    assert len(config.paths) == 2
-    paths = {p.path for p in config.paths}
+    assert len(spec.paths) == 2
+    paths = {p.path for p in spec.paths}
     assert paths == {"/api/v1/users", "/api/v1/users/{userId}"}
 
     # Verify all operations are properly loaded
     operations = []
-    for path in config.paths:
+    for path in spec.paths:
         if path.get:
             operations.append(path.get.id)
         if path.post:
@@ -755,9 +753,9 @@ def test_reference_resolution(tmp_path, sample_openapi_spec_with_refs):
     with open(spec_file, "w") as f:
         json.dump(sample_openapi_spec_with_refs, f)
 
-    config = Config.from_file(str(spec_file), ["/api/v1/users"], base_path=tmp_path)
-    assert len(config.paths) == 2
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), ["/api/v1/users"], base_path=tmp_path)
+    assert len(spec.paths) == 2
+    path = spec.paths[0]
 
     # Test GET response schema with resolved reference
     get_response = path.get.responses["200"]
@@ -786,11 +784,9 @@ def test_parameter_reference_resolution(tmp_path, sample_openapi_spec_with_refs)
     with open(spec_file, "w") as f:
         json.dump(sample_openapi_spec_with_refs, f)
 
-    config = Config.from_file(
-        str(spec_file), [r"/api/v1/users/\{.*\}"], base_path=tmp_path
-    )
-    assert len(config.paths) == 1
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), [r"/api/v1/users/\{.*\}"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    path = spec.paths[0]
 
     # Test resolved parameter reference
     get_op = path.get
@@ -809,14 +805,14 @@ def test_nasa_apod_spec_parsing(tmp_path, nasa_apod_spec):
         json.dump(nasa_apod_spec, f)
 
     # Parse the spec
-    config = Config.from_file(str(spec_file), ["/apod"], base_path=tmp_path)
+    spec = Spec.from_file(str(spec_file), ["/apod"], base_path=tmp_path)
 
     # Basic validation
-    assert len(config.paths) == 1
-    assert config.paths[0].path == "/apod"
+    assert len(spec.paths) == 1
+    assert spec.paths[0].path == "/apod"
 
     # Validate GET operation
-    get_op = config.paths[0].get
+    get_op = spec.paths[0].get
     assert get_op.id == "/apod"
     assert get_op.summary == "Returns images"
     assert get_op.description == "Returns the picture of the day"
@@ -846,9 +842,9 @@ def test_parameter_enums_and_defaults(tmp_path, weather_api_spec):
     with open(spec_file, "w") as f:
         json.dump(weather_api_spec, f)
 
-    config = Config.from_file(str(spec_file), ["/v1/forecast"], base_path=tmp_path)
-    assert len(config.paths) == 1
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), ["/v1/forecast"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    path = spec.paths[0]
 
     # Test GET operation parameters
     get_op = path.get
@@ -878,9 +874,9 @@ def test_form_encoded_request_body(tmp_path, form_encoded_spec):
     with open(spec_file, "w") as f:
         json.dump(form_encoded_spec, f)
 
-    config = Config.from_file(str(spec_file), ["/v1/customers"], base_path=tmp_path)
-    assert len(config.paths) == 1
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), ["/v1/customers"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    path = spec.paths[0]
 
     # Test POST operation
     post_op = path.post
@@ -990,14 +986,12 @@ def test_circular_references():
 
     try:
         # Load the spec
-        config = Config.from_file(
-            spec_path, ["/test"], base_path=Path(spec_path).parent
-        )
+        spec = Spec.from_file(spec_path, ["/test"], base_path=Path(spec_path).parent)
 
         # Verify that the circular references are handled gracefully
-        assert config.paths is not None
-        assert len(config.paths) == 1
-        path = config.paths[0]
+        assert spec.paths is not None
+        assert len(spec.paths) == 1
+        path = spec.paths[0]
         assert path.get is not None
         assert path.get.responses is not None
         assert "200" in path.get.responses
@@ -1033,9 +1027,9 @@ def test_anyof_allof_schemas(tmp_path, anyof_allof_spec):
     with open(spec_file, "w") as f:
         json.dump(anyof_allof_spec, f)
 
-    config = Config.from_file(str(spec_file), ["/test"], base_path=tmp_path)
-    assert len(config.paths) == 1
-    path = config.paths[0]
+    spec = Spec.from_file(str(spec_file), ["/test"], base_path=tmp_path)
+    assert len(spec.paths) == 1
+    path = spec.paths[0]
 
     # Test POST operation
     post_op = path.post

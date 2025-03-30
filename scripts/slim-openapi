@@ -6,7 +6,7 @@ import re
 import sys
 import yaml
 from typing import Dict, List, Set, Any
-from mcp_openapi.parser import Config
+from mcp_openapi.parser import Spec
 
 
 def load_openapi_spec(input_path: str) -> Dict[str, Any]:
@@ -193,8 +193,8 @@ def main():
 
     # Try to parse it back out
     print("Ensuring slimmed spec is parseable...")
-    config = Config.from_file(args.output_file, args.routes)
-    print(config)
+    spec = Spec.from_file(args.output_file, args.routes)
+    print(spec)
 
 
 if __name__ == "__main__":
