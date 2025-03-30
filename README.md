@@ -1,17 +1,17 @@
 # MCP-OpenAPI Server
 
-A server that exposes multiple OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol), allowing hosted AI agents to interact with your APIs in a standardized way.
+A server that exposes OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol).
 
-The MCP-OpenAPI Server provides a bridge between AI agents and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI agents to discover and use your APIs with properly typed arguments and responses.
+The MCP-OpenAPI Server provides a bridge between AI agents and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI agents to discover and use external APIs with properly typed arguments and responses.
 
 ## Key Features
 
 - **SSE Transport**: This server leverages the SSE transport for MCP so it works well for multiple agent clients.
   - Each OpenAPI server is available at a separate route `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`).
-- **Authentication forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers and/or query parameters.
-  - See the [client examples below](#access-from-mcp-clients) for how to configure this.
-- **Selective Route Exposure**: Expose only specific routes based on regular expression
-- **Type Safety**: Tools are generated with typed arguments on schemas - supporting both JSON body and query parameters - to ensure agents have enough context to make the correct call.
+- **Selective Route Exposure**: Expose only the routes/tools you want for your agents to be aware of, using a regex on the route.
+- **Authentication Forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers and/or query parameters.
+- **Type Safety**: Tools are generated with typed arguments based on the OpenAPI schema.
+  - JSON bodies and parameters are converted appropriately with supported for nested objects and more complex schemas.
 
 ## Running
 
@@ -98,7 +98,19 @@ The project includes two example clients that demonstrate different ways to inte
 
 ## Tool Inspection
 
-Alongside the MCP servers, the server exposes a couple HTTP endpoints for inspection of the available tools.
+You can use the tool provided at [scripts/cli.py](scripts/cli.py) to inspect the tool definitions generated from a schema.
+
+For example:
+
+```
+# View the tree of schemas parsed from a spec file
+uv run scripts/cli.py tools --url https://developer.zendesk.com/zendesk/oas.yaml --routes "/api/v2/tickets$"
+
+# View the tool functions with typing based on a spec file.
+uv run scripts/cli.py tools --url https://developer.zendesk.com/zendesk/oas.yaml --routes "/api/v2/tickets$"
+```
+
+The server also exposes a couple HTTP endpoints for inspection.
 
 - `/tools/` and `/tools/{namespace}` will show the tools and parameters they have exposed.
 
@@ -177,7 +189,7 @@ curl -s localhost:8000/tools | jq '.'
 }
 ```
 
-The MCP inspector is also useful for seeing what's available.
+Finally, you can use the [MCP inspector](https://github.com/modelcontextprotocol/inspector) to seeing what's available.
 
 ![mcp-inspector](images/mcp-inspector-httpbin.png)
 

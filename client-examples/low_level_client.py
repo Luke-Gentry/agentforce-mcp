@@ -43,6 +43,7 @@ Finally, run the example:
 
 import asyncio
 import logging
+from dataclasses import dataclass
 
 from mcp import ClientSession, types
 from mcp.client.sse import sse_client
@@ -67,12 +68,17 @@ async def handle_sampling_message(
     )
 
 
-async def main():
+@dataclass
+class FakeUseContext:
+    weather_auth_header: str
+
+
+async def run_agent(context: FakeUseContext):
     # Configure SSE client with custom headers
     async with sse_client(
         "http://localhost:8000/weather/sse",
         headers={
-            "Authorization": "Test Authorization Header",
+            "Authorization": context.weather_auth_header,
         },
     ) as (read, write):
         async with ClientSession(
@@ -110,4 +116,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    ctx = FakeUseContext(weather_auth_header="Test Authorization Header")
+    asyncio.run(run_agent(ctx))

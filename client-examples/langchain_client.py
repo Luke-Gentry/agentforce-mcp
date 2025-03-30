@@ -54,7 +54,7 @@ if not os.environ.get("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY environment variable must be set")
 
 
-async def main():
+async def run_agent(weather_auth_header: str):
     async with MultiServerMCPClient(
         {
             "weather": {
@@ -62,7 +62,7 @@ async def main():
                 "transport": "sse",
                 # Add a custom header to the request that can be forwarded to the OpenAPI endpoint.
                 "headers": {
-                    "Authorization": "Test Authorization Header",
+                    "Authorization": weather_auth_header,
                 },
             },
             "httpbin": {
@@ -115,4 +115,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(run_agent(auth_header="Test Authorization Header"))
