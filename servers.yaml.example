@@ -14,7 +14,7 @@ servers:
 
   - namespace: zendesk
     # Forward the Authorization header to the Zendesk API
-    headers:
+    forward_headers:
       - Authorization
     # This is the name as it appears to the LLM
     name: Zendesk API
@@ -47,4 +47,3 @@ servers:
       - /ip
       - /headers
       - /user-agent
-

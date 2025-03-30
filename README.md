@@ -1,6 +1,6 @@
 # MCP-OpenAPI Server
 
-A server that exposes OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol).
+A server that exposes OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol) for use with cloud-based agents.
 
 The MCP-OpenAPI Server provides a bridge between AI agents and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI agents to discover and use external APIs with properly typed arguments and responses.
 
@@ -17,35 +17,50 @@ The MCP-OpenAPI Server provides a bridge between AI agents and your existing API
 
 ### Start the Server
 
-Define your servers following the structure in `servers.yaml`:
+Define your servers in `servers.yaml` following the structure in [servers.yaml.example](servers.yaml.example) and:
 
 ```yaml
 servers:
   - namespace: stripe
-    # Define headers to forward to the server
-    headers:
+    # Forward the Authorization header to the Stripe API
+    forward_headers:
       - Authorization
-    # This is the name as it appears to the LLM
     name: Stripe API
     url: https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml
     base_url: https://api.stripe.com
-    # Select which API paths to expose over MCP
+    # Select which API paths to expose over MCP. Each matching path will become a tool with arguments
+    # from the query parameters or the JSON body.
+    # For example, we're only exposing the endpoints to GET/POST a customer.
     paths:
       - /v1/customers$
 
+  - namespace: zendesk
+    # Forward the Authorization header to the Zendesk API
+    forward_headers:
+      - Authorization
+    # This is the name as it appears to the LLM
+    name: Zendesk API
+    url: https://developer.zendesk.com/zendesk/oas.yaml
+    # Change the subdomain to match your Zendesk instance
+    base_url: https://{subdomain}.zendesk.com
+    # Select which API paths to expose over MCP
+    paths:
+      - /api/v2/tickets$
+
   - namespace: weather
-    name: OpenWeatherMap API
+    name: Open Weather API
     url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
-    base_url: https://api.openweathermap.org/data/2.5
-    # Forward the API key from the client's query parameters
-    query_params:
-      - appid
+    base_url: https://api.openweathermap.org
     paths:
       - /data/2.5/weather
+    # Forward the x-open-weather-app-id header to the apiid query parameter.
+    forward_query_params:
+      - x-open-weather-app-id: appid
+    timeout: 0.5
 
+  # Just an example to show reading a local file url
   - namespace: httpbin
     name: httpbin
-    # You can also point to a local spec file
     url: file://test-specs/httpbin.yaml
     base_url: https://httpbin.org
     paths:
@@ -56,7 +71,7 @@ servers:
       - /user-agent
 ```
 
-_⚠️ Note: For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below⚠️_
+_⚠️ Note: For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file. After the first time we will cache the parsed schemas on disk, so subsequent server restarts will be fast. To mitigate the slow cold start, you can try the the `slim-openapi` tool described below⚠️_
 
 Then you can run your server:
 
@@ -117,6 +132,129 @@ The server also exposes a couple HTTP endpoints for inspection.
 ```bash
 curl -s localhost:8000/tools | jq '.'
 {
+  "stripe": [
+    {
+      "name": "get_customers",
+      "description": "List all customers",
+      "parameters": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": null,
+          "description": "A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10."
+        },
+        {
+          "name": "email",
+          "type": "str",
+          "default": null,
+          "description": "A case-sensitive filter on the list based on the customer's `email` field. The value must be a string."
+        },
+        {
+          "name": "created",
+          "type": "str",
+          "default": null,
+          "description": "Only return customers that were created during the given date interval."
+        },
+        ...
+      ]
+    },
+    {
+      "name": "post_customers",
+      "description": "Create a customer",
+      "parameters": [
+        {
+          "name": "address",
+          "type": "Union[Any, str]",
+          "default": "None",
+          "description": "The customer's address., one of: (Object with properties: city, country, line1, line2, postal_code, state) OR (string)"
+        },
+        {
+          "name": "balance",
+          "type": "int",
+          "default": "None",
+          "description": "An integer amount in cents (or local equivalent) that represents the customer's current balance, which affect the customer's future invoices. A negative amount represents a credit that decreases the amount due on an invoice; a positive amount increases the amount due on an invoice."
+        },
+        {
+          "name": "description",
+          "type": "str",
+          "default": "None",
+          "description": "An arbitrary string that you can attach to a customer object. It is displayed alongside the customer in the dashboard."
+        },
+        {
+          "name": "email",
+          "type": "str",
+          "default": "None",
+          "description": "Customer's email address. It's displayed alongside the customer in your dashboard and can be useful for searching and tracking. This may be up to *512 characters*."
+        },
+        ...
+      ]
+    }
+  ],
+  "zendesk": [
+    {
+      "name": "list_tickets",
+      "description": "List Tickets",
+      "parameters": [
+        {
+          "name": "external_id",
+          "type": "str",
+          "default": null,
+          "description": "Lists tickets by external id. External ids don't have to be unique for each ticket. As a result, the request may return multiple tickets with the same external id."
+        }
+      ]
+    },
+    {
+      "name": "create_ticket",
+      "description": "Create Ticket",
+      "parameters": [
+        {
+          "name": "ticket_additional_collaborators",
+          "type": "str",
+          "default": "None",
+          "description": "An array of numeric IDs, emails, or objects containing name and email properties. See [Setting Collaborators](/api-reference/ticketing/tickets/tickets/#setting-collaborators). An email notification is sent to them when the ticket is updated"
+        },
+        {
+          "name": "ticket_assignee_email",
+          "type": "str",
+          "default": "None",
+          "description": "The email address of the agent to assign the ticket to"
+        },
+        {
+          "name": "ticket_assignee_id",
+          "type": "int",
+          "default": "None",
+          "description": "The agent currently assigned to the ticket"
+        },
+        ...
+      ]
+    }
+  ],
+  "weather": [
+    {
+      "name": "get_weather_data",
+      "description": "Retrieve current weather, hourly forecast, and daily forecast based on latitude and longitude.",
+      "parameters": [
+        {
+          "name": "lon",
+          "type": "float",
+          "default": null,
+          "description": "Longitude of the location."
+        },
+        {
+          "name": "lat",
+          "type": "float",
+          "default": null,
+          "description": "Latitude of the location."
+        },
+        {
+          "name": "appid",
+          "type": "str",
+          "default": null,
+          "description": "API key for authentication."
+        }
+      ]
+    }
+  ],
   "httpbin": [
     {
       "name": "get_ip",
@@ -127,62 +265,6 @@ curl -s localhost:8000/tools | jq '.'
       "name": "get_headers",
       "description": "Returns headers",
       "parameters": []
-    },
-    {
-      "name": "get_user_agent",
-      "description": "Returns user-agent",
-      "parameters": []
-    },
-    ...
-  ],
-  "stripe": [
-    {
-      "name": "get_customers",
-      "description": "List all customers",
-      "parameters": [
-        {
-          "name": "test_clock",
-          "type": "str",
-          "default": "None",
-          "description": "Provides a list of customers that are associated with the specified test clock. The response will not include customers with test clocks if this parameter is not set."
-        },
-        {
-          "name": "starting_after",
-          "type": "str",
-          "default": "None",
-          "description": "A cursor for use in pagination. `starting_after` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, ending with `obj_foo`, your subsequent call can include `starting_after=obj_foo` in order to fetch the next page of the list."
-        },
-        {
-          "name": "limit",
-          "type": "int",
-          "default": "None",
-          "description": "A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10."
-        },
-        {
-          "name": "expand",
-          "type": "str",
-          "default": "None",
-          "description": "Specifies which fields in the response should be expanded."
-        },
-        {
-          "name": "ending_before",
-          "type": "str",
-          "default": "None",
-          "description": "A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list."
-        },
-        {
-          "name": "email",
-          "type": "str",
-          "default": "None",
-          "description": "A case-sensitive filter on the list based on the customer's `email` field. The value must be a string."
-        },
-        {
-          "name": "created",
-          "type": "str",
-          "default": "None",
-          "description": "Only return customers that were created during the given date interval."
-        }
-      ]
     },
     ...
   ]
