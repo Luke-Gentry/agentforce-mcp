@@ -19,7 +19,7 @@ The MCP-OpenAPI Server provides a bridge between AI agents and your existing API
 
 Define your servers following the structure in `servers.yaml`:
 
-```
+```yaml
 servers:
   - namespace: stripe
     # Define headers to forward to the server
@@ -54,7 +54,6 @@ servers:
       - /ip
       - /headers
       - /user-agent
-
 ```
 
 _⚠️ Note: For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below⚠️_
