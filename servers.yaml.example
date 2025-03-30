@@ -37,3 +37,4 @@ servers:
     # Forward the API key from the client's query parameters
     paths:
       - /v1/forecast$
+    timeout: 0.5

@@ -56,7 +56,7 @@ def mock_context():
         class RequestContext:
             class LifespanContext:
                 base_url = "http://test.com"
-                proxy = MCPProxy(record=False)
+                proxy = MCPProxy()
 
             lifespan_context = LifespanContext()
             request = Request(

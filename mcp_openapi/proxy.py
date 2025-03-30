@@ -1,11 +1,7 @@
 # stdlib
 import logging
-import json
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, Optional, Callable, List
 from starlette.requests import Request
-from dataclasses import dataclass
 
 # 3p
 import httpx
@@ -13,36 +9,27 @@ import httpx
 log = logging.getLogger(__name__)
 
 
-@dataclass
-class ProxySettings:
-    """Settings for how to proxy requests."""
-
-    forward_headers: Optional[List[str]] = None
-    forward_query_params: Optional[List[str]] = None
-
-
 class MCPProxy:
     """A class to intercept and record HTTP requests made through httpx clients."""
 
     def __init__(
         self,
-        cassette_dir: str = "cassettes",
-        settings: Optional[ProxySettings] = None,
+        forward_headers: Optional[List[str]] = None,
+        forward_query_params: Optional[List[str]] = None,
         client_builder: Optional[Callable[[], httpx.AsyncClient]] = None,
-        record: bool = False,
+        timeout: Optional[float] = None,
     ):
         """Initialize the recorder with a directory to store cassettes.
 
         Args:
-            cassette_dir: Directory where request/response cassettes will be stored
-            settings: ProxySettings object containing forwarding configuration
+            forward_headers: List of headers to forward from the request to the server
+            forward_query_params: List of query parameters to forward from the request to the server
             client_builder: Function that returns an AsyncClient. Defaults to creating a new httpx.AsyncClient
         """
-        self.cassette_dir = Path(cassette_dir)
-        self.cassette_dir.mkdir(parents=True, exist_ok=True)
-        self.settings = settings or ProxySettings()
+        self.forward_headers = forward_headers
+        self.forward_query_params = forward_query_params
         self.client_builder = client_builder or (lambda: httpx.AsyncClient())
-        self.record = record
+        self.timeout = timeout
 
     async def do_request(
         self,
@@ -52,31 +39,28 @@ class MCPProxy:
         params: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
     ) -> httpx.Response:
-        """Record and execute an HTTP request.
+        """Execute an HTTP request.
 
         Args:
             method: HTTP method (GET, POST, etc.)
             url: The URL to make the request to
             params: Query parameters
             json_body: JSON body data
-            **kwargs: Additional arguments to pass to httpx.Client.request
 
         Returns:
             The httpx Response object
         """
         # Pass along any headers that were set in the server config
         request_headers = {}
-        if self.settings.forward_headers:
-            for header in self.settings.forward_headers:
+        if self.forward_headers:
+            for header in self.forward_headers:
                 if header in request.headers:
                     request_headers[header] = request.headers[header]
 
         # Forward specified query parameters
-        if self.settings.forward_query_params and params:
+        if self.forward_query_params and params:
             forwarded_params = {
-                k: v
-                for k, v in params.items()
-                if k in self.settings.forward_query_params
+                k: v for k, v in params.items() if k in self.forward_query_params
             }
             params = forwarded_params
 
@@ -85,11 +69,6 @@ class MCPProxy:
             params = {k: v for k, v in params.items() if v is not None}
         if json_body:
             json_body = {k: v for k, v in json_body.items() if v is not None}
-
-        # Create a unique filename for this request
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{method.lower()}_{Path(url).name}.json"
-        cassette_path = self.cassette_dir / filename
 
         # Log the request
         log.info(f"Making {method} request to {url}")
@@ -107,31 +86,9 @@ class MCPProxy:
                 params=params,
                 json=json_body,
                 headers=request_headers,
+                timeout=self.timeout,
             )
         finally:
             await client.aclose()
-
-        if self.record:
-            # Record the request and response
-            cassette_data = {
-                "request": {
-                    "method": method,
-                    "url": url,
-                    "params": params,
-                    "json": json_body,
-                },
-                "response": {
-                    "status_code": response.status_code,
-                    "headers": dict(response.headers),
-                    "text": response.text,
-                },
-                "timestamp": timestamp,
-            }
-
-            # Save to file
-            with open(cassette_path, "w") as f:
-                json.dump(cassette_data, f, indent=2)
-
-            log.info(f"Request recorded to {cassette_path}")
 
         return response

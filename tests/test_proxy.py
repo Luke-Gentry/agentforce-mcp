@@ -1,7 +1,5 @@
 # stdlib
 import pytest
-from pathlib import Path
-import json
 
 # 3p
 from unittest.mock import AsyncMock, MagicMock
@@ -9,7 +7,7 @@ from starlette.requests import Request
 from httpx import Response, AsyncClient
 
 # local
-from mcp_openapi.proxy import MCPProxy, ProxySettings
+from mcp_openapi.proxy import MCPProxy
 
 
 @pytest.fixture
@@ -28,11 +26,9 @@ def mock_httpx_client():
 
 @pytest.fixture
 def proxy(tmp_path, mock_httpx_client):
-    """Create a proxy instance with a temporary cassette directory and mock client."""
+    """Create a proxy instance and mock client."""
     return MCPProxy(
-        cassette_dir=str(tmp_path),
         client_builder=lambda: mock_httpx_client,
-        record=True,
     )
 
 
@@ -74,26 +70,15 @@ async def test_proxy_params(proxy, mock_request, mock_httpx_client):
         params=params,
         json=None,
         headers={},
+        timeout=None,
     )
-
-    # Check that a cassette file was created
-    cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
-    assert len(cassette_files) == 1
-
-    # Verify the recorded data
-    with open(cassette_files[0]) as f:
-        recorded_data = json.load(f)
-
-    assert recorded_data["request"]["method"] == "GET"
-    assert recorded_data["request"]["url"] == url
-    assert recorded_data["request"]["params"] == params
 
 
 @pytest.mark.asyncio
 async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
     """Test that only specified headers are forwarded."""
-    # Set up recorder with specific headers to forward
-    proxy.settings = ProxySettings(forward_headers=["authorization", "x-custom-header"])
+    proxy.forward_headers = ["authorization", "x-custom-header"]
+    proxy.timeout = 0.5
 
     url = "https://api.example.com/test"
 
@@ -115,18 +100,14 @@ async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
             "authorization": "Bearer test-token",
             "x-custom-header": "test-value",
         },
+        timeout=0.5,
     )
-
-    # Check that a cassette file was created
-    cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
-    assert len(cassette_files) == 1
 
 
 @pytest.mark.asyncio
 async def test_proxy_forward_query_params(proxy, mock_request, mock_httpx_client):
     """Test that only specified query parameters are forwarded."""
-    # Set up recorder with specific query parameters to forward
-    proxy.settings = ProxySettings(forward_query_params=["api_key", "appid"])
+    proxy.forward_query_params = ["api_key", "appid"]
 
     url = "https://api.example.com/test"
     params = {
@@ -154,27 +135,13 @@ async def test_proxy_forward_query_params(proxy, mock_request, mock_httpx_client
         },
         json=None,
         headers={},
+        timeout=None,
     )
-
-    # Check that a cassette file was created
-    cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
-    assert len(cassette_files) == 1
-
-    # Verify the recorded data
-    with open(cassette_files[0]) as f:
-        recorded_data = json.load(f)
-
-    assert recorded_data["request"]["method"] == "GET"
-    assert recorded_data["request"]["url"] == url
-    assert recorded_data["request"]["params"] == {
-        "api_key": "secret123",
-        "appid": "weather123",
-    }
 
 
 @pytest.mark.asyncio
 async def test_proxy_json_body(proxy, mock_request, mock_httpx_client):
-    """Test that JSON body is correctly passed and recorded."""
+    """Test that JSON body is correctly passed."""
     url = "https://api.example.com/test"
     json_body = {"test": "data"}
 
@@ -194,16 +161,5 @@ async def test_proxy_json_body(proxy, mock_request, mock_httpx_client):
         params=None,
         json=json_body,
         headers={},
+        timeout=None,
     )
-
-    # Check that a cassette file was created
-    cassette_files = list(Path(proxy.cassette_dir).glob("*.json"))
-    assert len(cassette_files) == 1
-
-    # Verify the recorded data
-    with open(cassette_files[0]) as f:
-        recorded_data = json.load(f)
-
-    assert recorded_data["request"]["method"] == "POST"
-    assert recorded_data["request"]["url"] == url
-    assert recorded_data["request"]["json"] == json_body

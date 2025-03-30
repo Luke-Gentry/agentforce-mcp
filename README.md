@@ -8,20 +8,10 @@ The MCP-OpenAPI Server provides a bridge between AI models and your existing API
 
 ## Key Features
 
-- **Selective Route Exposure**: Expose only specific routes based on regular expressions
-- **Server-Sent Events Transport**: Unlike many existing MCP implementations that use stdio transport, this project leverages SSE for hosted model communication
-  - Each route is available via SSE at `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`)
-- **Type Safety**: Provide strictly typed arguments to tools based on schemas (supporting both JSON body and query parameters)
-- **Multiple Schema Sources**: Support for JSON and YAML OpenAPI schemas from local files or remote URLs
-- **Multi-User Support**: Share the same MCP tools across multiple users by forwarding headers or query parameters. See examples below.
-
-## Why SSE Transport?
-
-While many MCP implementations rely on stdio (Standard Input/Output) for local integrations and command-line tools, this project focuses on SSE transport to enable:
-
-- **Hosted Model Support**: Seamless integration with remotely hosted AI agents
-- **Simplified Deployment**: Easier to deploy and scale in cloud environments
-- **Multi-Tenant Architecture**: Support for multiple users through standard HTTP authentication headers
+- **SSE Transport**: This server leverages the SSE transport for MCP so it works well for multiple agent clients. Each OpenAPI server is available at a separate route `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`). We use SSE rather then stdio for a hosted model.
+- **Selective Route Exposure**: Expose only specific routes based on regular expression
+- **Type Safety**: Aims to provide typed arguments to tools based on schemas (supporting both JSON body and query parameters) to ensure agents have enough context to make the correct call.
+- **Header and query param forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers or query parameters. See the client examples for how to configure this.
 
 ## Quick Start
 
@@ -69,7 +59,7 @@ _⚠️ Note: For large OpenAPI specs you might find the initial cold start slow
 
 Then you can run your server:
 
-**Manually**
+**Locally**
 
 ```bash
 uv run main.py
@@ -221,11 +211,7 @@ curl -s localhost:8000/tools | jq '.'
         }
       ]
     },
-    {
-      "name": "post_customers",
-      "description": "Create a customer",
-      "parameters": []
-    }
+    ...
   ]
 }
 ```

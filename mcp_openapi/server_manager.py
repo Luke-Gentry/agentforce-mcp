@@ -19,7 +19,7 @@ from mcp_openapi.tools import (
     Tool,
     create_tool_function_exec,
 )
-from mcp_openapi.proxy import MCPProxy, ProxySettings
+from mcp_openapi.proxy import MCPProxy
 
 
 log = logging.getLogger(__name__)
@@ -92,12 +92,8 @@ class ServerManager:
         url = server_config["url"]
         base_url = server_config["base_url"]
         paths = server_config["paths"]
-
-        # Create proxy settings from config
-        settings = ProxySettings(
-            forward_headers=server_config.get("headers", []),
-            forward_query_params=server_config.get("query_params", []),
-        )
+        forward_headers = server_config.get("headers", [])
+        forward_query_params = server_config.get("query_params", [])
 
         log.info(f"Starting server for {name} ({namespace})")
 
@@ -119,8 +115,8 @@ class ServerManager:
                 try:
                     # Create recorder with namespace-specific cassette directory
                     proxy = MCPProxy(
-                        cassette_dir=f"cassettes/{namespace}",
-                        settings=settings,
+                        forward_headers=forward_headers,
+                        forward_query_params=forward_query_params,
                     )
                     yield AppContext(base_url=base_url, proxy=proxy)
                 finally:

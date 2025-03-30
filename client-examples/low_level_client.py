@@ -43,7 +43,6 @@ Finally, run the example:
 
 import asyncio
 import logging
-from typing import Any
 
 from mcp import ClientSession, types
 from mcp.client.sse import sse_client
@@ -63,7 +62,7 @@ async def handle_sampling_message(
             type="text",
             text="Hello, world! from model",
         ),
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         stopReason="endTurn",
     )
 
