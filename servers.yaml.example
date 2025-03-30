@@ -13,14 +13,14 @@ servers:
       - /v1/customers$
 
   - namespace: zendesk
-    # Define headers to forward to the server
+    # Forward the Authorization header to the Zendesk API
     headers:
       - Authorization
     # This is the name as it appears to the LLM
     name: Zendesk API
     url: https://developer.zendesk.com/zendesk/oas.yaml
     # Change the subdomain to match your Zendesk instance
-    base_url: https://api.zendesk.com
+    base_url: https://{subdomain}.zendesk.com
     # Select which API paths to expose over MCP
     paths:
       - /api/v2/tickets$
@@ -36,6 +36,7 @@ servers:
       - x-open-weather-app-id: appid
     timeout: 0.5
 
+  # Just an example to show reading a local file url
   - namespace: httpbin
     name: httpbin
     url: file://test-specs/httpbin.yaml

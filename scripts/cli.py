@@ -59,6 +59,8 @@ def tools_command(args: argparse.Namespace) -> None:
             print(f"  - {param.name}: {param.type}")
             if param.description:
                 print(f"    Description: {param.description}")
+            if param.request_body_field:
+                print(f"    Request Body Field: {param.request_body_field}")
 
     print("\n----- Tool Functions -----\n")
     for tool in tools:

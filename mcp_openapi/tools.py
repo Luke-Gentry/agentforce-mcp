@@ -20,7 +20,7 @@ class ToolParameter(BaseModel):
     name: str
     type: str
     default: Any
-    request_body: bool = False
+    request_body_field: str | None = None
     description: str | None = None
 
 
@@ -98,11 +98,24 @@ class Tool(BaseModel):
                             name=param.name,
                             type=cls._to_python_type(param),
                             description=description,
-                            request_body=True,
+                            request_body_field=param.name,
                             default="None",
                         )
                     )
                     seen_params.add(param.name)
+                elif param.all_of:
+                    for all_of in param.all_of:
+                        props = all_of.properties if all_of.properties else [all_of]
+                        for p in props:
+                            tool_params.append(
+                                ToolParameter(
+                                    name=f"{param.name}_{p.name}",
+                                    type=cls._to_python_type(p),
+                                    description=p.description,
+                                    default="None",
+                                    request_body_field=f"{param.name}.{p.name}",
+                                )
+                            )
                 elif param.properties:
                     # skipping multiple nested properties in tools for now.
                     pass
@@ -113,7 +126,7 @@ class Tool(BaseModel):
                             type=cls._to_python_type(param),
                             description=param.description,
                             default="None",
-                            request_body=True,
+                            request_body_field=param.name,
                         )
                     )
         return cls(
@@ -240,6 +253,17 @@ def tools_from_spec(spec: parser.Spec, forward_query_params: list[str]) -> list[
     return tools
 
 
+# This function is used by the tool functions.
+def _set_body_field(request_body_field: str, body_dict: dict, value: Any):
+    parts = request_body_field.split(".")
+    current = body_dict
+    for part in parts[:-1]:
+        if part not in current:
+            current[part] = {}
+        current = current[part]
+    current[parts[-1]] = value
+
+
 def get_tool_function_body(tool: Tool) -> str:
     params = []
     for param in tool.parameters:
@@ -255,8 +279,16 @@ def get_tool_function_body(tool: Tool) -> str:
         param_str += f" = Field({', '.join(field_parts)})"
         params.append(param_str)
 
-    # Build the function signature with explicit parameters
-    # We have to use exec() for now to make this work with all the typing we want.
+    # Build the request body field assignments
+    body_assignments = []
+    for param in tool.parameters:
+        if param.request_body_field:
+            body_assignments.append(
+                f'    _set_body_field("{param.request_body_field}", json_body, {param.name})'
+            )
+
+    body_assignments_str = "\n".join(body_assignments)
+
     return f"""async def {tool.name}(
         ctx: Context,
         {",\n        ".join(params)}
@@ -264,8 +296,9 @@ def get_tool_function_body(tool: Tool) -> str:
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
     proxy = ctx.request_context.lifespan_context.proxy
-    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.request_body)} }}
-    json_body = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if p.request_body)} }}
+    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.request_body_field)} }}
+    json_body = {{}}
+{body_assignments_str}
 
     response = await proxy.do_request(
         request=ctx.request_context.request,
