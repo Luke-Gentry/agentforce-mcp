@@ -1,6 +1,6 @@
 # stdlib
 import re
-from typing import Any, Union
+from typing import Any, Union, Callable
 
 # 3p
 from pydantic import BaseModel
@@ -240,7 +240,7 @@ def tools_from_spec(spec: parser.Spec, forward_query_params: list[str]) -> list[
     return tools
 
 
-def create_tool_function_exec(tool):
+def get_tool_function_body(tool: Tool) -> str:
     params = []
     for param in tool.parameters:
         param_str = f"{param.name}: {param.type}"
@@ -257,9 +257,9 @@ def create_tool_function_exec(tool):
 
     # Build the function signature with explicit parameters
     # We have to use exec() for now to make this work with all the typing we want.
-    body = f"""async def {tool.name}(
+    return f"""async def {tool.name}(
         ctx: Context,
-        {', '.join(params)}
+        {",\n        ".join(params)}
     ) -> dict:
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
@@ -276,7 +276,13 @@ def create_tool_function_exec(tool):
     )
     return response.text"""
 
+
+def create_tool_function_exec(tool: Tool) -> Callable:
+    """Create a tool function from a tool object. This uses exec() to create the function which
+    is somewhat clunky but works with all the typing we want.
+    Note: There's a WIP version that's avoiding the exec() but not yet ready for use.
+    """
     # Execute the function definition
     local_vars = {}
-    exec(body, globals(), local_vars)
+    exec(get_tool_function_body(tool), globals(), local_vars)
     return local_vars[tool.name]

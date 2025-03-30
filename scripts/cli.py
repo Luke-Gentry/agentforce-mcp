@@ -3,7 +3,7 @@
 import argparse
 
 from mcp_openapi.parser import Spec
-from mcp_openapi.tools import tools_from_spec
+from mcp_openapi.tools import tools_from_spec, get_tool_function_body
 
 
 def parse_command(args: argparse.Namespace) -> None:
@@ -47,9 +47,10 @@ def tools_command(args: argparse.Namespace) -> None:
     else:
         spec = Spec.from_url(args.url, args.routes, use_cache=False)
 
+    print("\n----- Tools Definitions -----\n")
     tools = tools_from_spec(spec, args.forward_query_params)
     for tool in tools:
-        print(f"\nTool: {tool.name}")
+        print(f"Tool: {tool.name}")
         print(f"Description: {tool.description}")
         print(f"Method: {tool.method}")
         print(f"Path: {tool.path}")
@@ -58,6 +59,10 @@ def tools_command(args: argparse.Namespace) -> None:
             print(f"  - {param.name}: {param.type}")
             if param.description:
                 print(f"    Description: {param.description}")
+
+    print("\n----- Tool Functions -----\n")
+    for tool in tools:
+        print(get_tool_function_body(tool) + "\n")
 
 
 def main() -> None:
