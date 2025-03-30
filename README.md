@@ -67,18 +67,6 @@ servers:
     forward_query_params:
       - x-open-weather-app-id: appid
     timeout: 0.5
-
-  # Just an example to show reading a local file url
-  - namespace: httpbin
-    name: httpbin
-    url: file://test-specs/httpbin.yaml
-    base_url: https://httpbin.org
-    paths:
-      - /get
-      - /status
-      - /ip
-      - /headers
-      - /user-agent
 ```
 
 _⚠️ Note: For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file. After the first time we will cache the parsed schemas on disk, so subsequent server restarts will be fast. To mitigate the slow cold start, you can try the the `slim-openapi` tool described below⚠️_

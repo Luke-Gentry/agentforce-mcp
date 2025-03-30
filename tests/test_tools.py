@@ -45,7 +45,7 @@ def mock_tool():
                 type="dict",
                 description="Body parameter",
                 default="None",
-                request_body=True,
+                request_body_field="test.body_param",
             ),
         ],
         method="POST",
@@ -289,7 +289,7 @@ async def test_tool_function_exec(mock_tool, mock_context):
         assert call_args["method"] == "POST"
         assert call_args["url"] == "http://test.com/test/path"
         assert call_args["params"] == {"param1": "test", "param2": 123}
-        assert call_args["json"] == {"body_param": {"key": "value"}}
+        assert call_args["json"] == {"test": {"body_param": {"key": "value"}}}
         assert result == '{"result": "success"}'
 
 
@@ -810,12 +810,12 @@ def test_end_to_end_form_encoded_api():
         name_param = param_map["name"]
         assert name_param.type == "str"
         assert name_param.description == "The customer's full name or business name."
-        assert name_param.request_body is True
+        assert name_param.request_body_field == "name"
 
         email_param = param_map["email"]
         assert email_param.type == "str"
         assert email_param.description == "Customer's email address"
-        assert email_param.request_body is True
+        assert email_param.request_body_field == "email"
 
         # Test address parameter with anyOf
         address_param = param_map["address"]
@@ -824,13 +824,13 @@ def test_end_to_end_form_encoded_api():
         assert (
             "Object with properties: line1, city, country" in address_param.description
         )
-        assert address_param.request_body is True
+        assert address_param.request_body_field == "address"
 
         # Test metadata parameter with anyOf and additionalProperties
         metadata_param = param_map["metadata"]
         assert metadata_param.type == "Union[Any, str]"
         assert "Set of key-value pairs" in metadata_param.description
-        assert metadata_param.request_body is True
+        assert metadata_param.request_body_field == "metadata"
 
         # Create the tool function
         tool_func = create_tool_function_exec(tool)

@@ -136,7 +136,7 @@ class Spec:
             file_path,
             file_path,
             loader=aiopenapi3.FileSystemLoader(base_path),
-            plugins=[FilterPaths(path_patterns)],
+            plugins=[RemovePaths(), FilterPaths(path_patterns)],
         )
         spec = cls._from_api(api, path_patterns)
 
