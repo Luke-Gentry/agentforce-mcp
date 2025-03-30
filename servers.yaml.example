@@ -12,6 +12,19 @@ servers:
     paths:
       - /v1/customers$
 
+  - namespace: zendesk
+    # Define headers to forward to the server
+    headers:
+      - Authorization
+    # This is the name as it appears to the LLM
+    name: Zendesk API
+    url: https://developer.zendesk.com/zendesk/oas.yaml
+    # Change the subdomain to match your Zendesk instance
+    base_url: https://api.zendesk.com
+    # Select which API paths to expose over MCP
+    paths:
+      - /api/v2/tickets$
+
   - namespace: weather
     name: Open Weather API
     url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
