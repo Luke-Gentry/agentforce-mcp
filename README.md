@@ -1,29 +1,23 @@
 # MCP-OpenAPI Server
 
-A server that exposes multiple OpenAPI endpoints through [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol), allowing hosted AI agents to interact with your APIs in a standardized way.
+A server that exposes multiple OpenAPI endpoints as tools via the [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-protocol), allowing hosted AI agents to interact with your APIs in a standardized way.
 
-## What is this?
-
-The MCP-OpenAPI Server provides a bridge between AI models and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI models to discover and use your APIs with properly typed arguments and responses.
+The MCP-OpenAPI Server provides a bridge between AI agents and your existing APIs by exposing OpenAPI-defined endpoints through the Model Context Protocol. This allows AI agents to discover and use your APIs with properly typed arguments and responses.
 
 ## Key Features
 
-- **SSE Transport**: This server leverages the SSE transport for MCP so it works well for multiple agent clients. Each OpenAPI server is available at a separate route `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`). We use SSE rather then stdio for a hosted model.
+- **SSE Transport**: This server leverages the SSE transport for MCP so it works well for multiple agent clients.
+  - Each OpenAPI server is available at a separate route `<host>/<namespace>/sse` (e.g., `https://my-mcp-server/stripe/sse`).
+- **Authentication forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers and/or query parameters.
+  - See the [client examples below](#access-from-mcp-clients) for how to configure this.
 - **Selective Route Exposure**: Expose only specific routes based on regular expression
-- **Type Safety**: Aims to provide typed arguments to tools based on schemas (supporting both JSON body and query parameters) to ensure agents have enough context to make the correct call.
-- **Header and query param forwarding**: Share the same MCP tools across multiple users by forwarding the appropriate authorization headers or query parameters. See the client examples for how to configure this.
+- **Type Safety**: Tools are generated with typed arguments on schemas - supporting both JSON body and query parameters - to ensure agents have enough context to make the correct call.
 
-## Quick Start
+## Running
 
-### Starting the Server
+### Start the Server
 
-Install the necessary dependencies using [uv](https://github.com/astral-sh/uv).
-
-```bash
-uv sync
-```
-
-Define your servers following the structure of `services.yaml.example`:
+Define your servers following the structure in `servers.yaml`:
 
 ```
 servers:
@@ -48,20 +42,29 @@ servers:
       - appid
     paths:
       - /data/2.5/weather
+
+  - namespace: httpbin
+    name: httpbin
+    # You can also point to a local spec file
+    url: file://test-specs/httpbin.yaml
+    base_url: https://httpbin.org
+    paths:
+      - /get
+      - /status
+      - /ip
+      - /headers
+      - /user-agent
+
 ```
 
-- You can point to either a remote URL or local file (using `file://`).
-- In `paths` you define Regular Expressions which will match the paths you want to expose.
-- Use `headers` to specify which HTTP headers to forward from the client request (e.g. "Authorization" headers)
-- Use `query_params` to specify which query parameters to forward from the client request (useful for API keys)
-
-_⚠️ Note: For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below_
+_⚠️ Note: For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file. To mitigate this you can use the `slim-openapi` script described below⚠️_
 
 Then you can run your server:
 
-**Locally**
+**Locally (requires [uv](https://github.com/astral-sh/uv))**
 
 ```bash
+uv sync
 uv run main.py
 ```
 
@@ -87,34 +90,16 @@ docker run -p 8000:8000 \
   mcp-openapi
 ```
 
-### Client Access
+### Access from MCP clients
 
-The project includes two example clients that demonstrate different ways to interact with the MCP-OpenAPI server.
+The project includes two example clients that demonstrate different ways to interact with the MCP-OpenAPI server. Both examples use the same server configuration and demonstrate header forwarding for authentication. The low-level client is particularly useful for custom integrations or when you need more direct control over the MCP client.
 
-Both examples use the same server configuration and demonstrate header forwarding for authentication. The low-level client is particularly useful for custom integrations or when you need more direct control over the MCP client.
+- **[Low-Level Client](client-examples/low_level_client.py))**: This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
+- **[LangChain Integration](client-examples/langchain_client.py)**: This example shows how to integrate the MCP-OpenAPI server with LangChain (using the [langchain-mcp-adapters](https://github.com/langchain-ai/langchain-mcp-adapters)), allowing AI agents to use these APIs through LangChain's tool system.
 
-**LangChain Integration (`examples/langchain_client.py`)**
+## Tool Inspection
 
-This example shows how to integrate the MCP-OpenAPI server with LangChain, allowing AI agents to use your APIs through LangChain's tool system. It demonstrates:
-
-**Low-Level Client (`examples/low_level_client.py`)**
-
-This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
-
-## Slimming down specs with `slim-openapi`
-
-For large OpenAPI specs you might find the initial cold start slow as it processes the whole file. Some SaaS tools (e.g. Stripe, Zendesk) have multi-megabyte spec YAML files which are processed somewhat inefficiently today. Using the `slim-openapi` tool you can shorten these to just the spec needed for your routes. All references will be resolved appropriately so it can still parse.
-
-```bash
-uv run scripts/slim-openapi \
-    -u https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml \
-    --routes "/v1/customers$" \
-    -o stripe-slim.yaml
-```
-
-## Inspecting
-
-Alongside the MCP servers, the server exposes a couple HTTP endpoints for inspection.
+Alongside the MCP servers, the server exposes a couple HTTP endpoints for inspection of the available tools.
 
 - `/tools/` and `/tools/{namespace}` will show the tools and parameters they have exposed.
 
@@ -122,30 +107,6 @@ Alongside the MCP servers, the server exposes a couple HTTP endpoints for inspec
 curl -s localhost:8000/tools | jq '.'
 {
   "httpbin": [
-    {
-      "name": "get_request",
-      "description": "Returns GET data",
-      "parameters": [
-        {
-          "name": "freeform",
-          "type": "str",
-          "default": "None",
-          "description": "Any query parameters you want to test with"
-        }
-      ]
-    },
-    {
-      "name": "status_code",
-      "description": "Returns specified status code",
-      "parameters": [
-        {
-          "name": "code",
-          "type": "int",
-          "default": null,
-          "description": "HTTP status code to return"
-        }
-      ]
-    },
     {
       "name": "get_ip",
       "description": "Returns origin IP",
@@ -160,7 +121,8 @@ curl -s localhost:8000/tools | jq '.'
       "name": "get_user_agent",
       "description": "Returns user-agent",
       "parameters": []
-    }
+    },
+    ...
   ],
   "stripe": [
     {
@@ -219,6 +181,19 @@ curl -s localhost:8000/tools | jq '.'
 The MCP inspector is also useful for seeing what's available.
 
 ![mcp-inspector](images/mcp-inspector-httpbin.png)
+
+## Slimming down large spec files with `slim-openapi`
+
+For large (multi-megabyte) OpenAPI specs you might find the initial cold start slow as it processes the whole file.
+
+Some SaaS tools (e.g. Stripe, Zendesk) have multi-megabyte spec YAML files which are processed somewhat inefficiently today. Using the `slim-openapi` tool you can shorten these to just the spec needed for your routes. All references will be resolved appropriately so it can still parse.
+
+```bash
+uv run scripts/slim-openapi \
+    -u https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml \
+    --routes "/v1/customers$" \
+    -o stripe-slim.yaml
+```
 
 ## License
 
