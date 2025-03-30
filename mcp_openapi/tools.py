@@ -69,7 +69,7 @@ class Tool(BaseModel):
                 ToolParameter(
                     name=cls._to_python_arg(param.name),
                     type=cls._to_python_type(param),
-                    description=description,
+                    description=cls._to_python_description(description),
                     default=param.default,
                 )
             )
@@ -97,7 +97,7 @@ class Tool(BaseModel):
                         ToolParameter(
                             name=param.name,
                             type=cls._to_python_type(param),
-                            description=description,
+                            description=cls._to_python_description(description),
                             request_body_field=param.name,
                             default="None",
                         )
@@ -111,7 +111,9 @@ class Tool(BaseModel):
                                 ToolParameter(
                                     name=f"{param.name}_{p.name}",
                                     type=cls._to_python_type(p),
-                                    description=p.description,
+                                    description=cls._to_python_description(
+                                        p.description
+                                    ),
                                     default="None",
                                     request_body_field=f"{param.name}.{p.name}",
                                 )
@@ -124,14 +126,16 @@ class Tool(BaseModel):
                         ToolParameter(
                             name=param.name,
                             type=cls._to_python_type(param),
-                            description=param.description,
+                            description=cls._to_python_description(param.description),
                             default="None",
                             request_body_field=param.name,
                         )
                     )
         return cls(
             name=cls._to_fn_name(operation.id),
-            description=operation.summary or operation.description or "",
+            description=cls._to_python_description(
+                operation.summary or operation.description or ""
+            ),
             parameters=tool_params,
             method=method_name,
             path=path,
@@ -174,6 +178,12 @@ class Tool(BaseModel):
         if name.endswith("[]"):
             name = f"{name[:-2]}s"
         return name
+
+    @classmethod
+    def _to_python_description(cls, description: str) -> str:
+        if description:
+            return description.replace("\n", " ").replace('"', "'").strip()
+        return ""
 
     @classmethod
     def _to_python_type(cls, param: Union[parser.Parameter, parser.Schema]) -> str:

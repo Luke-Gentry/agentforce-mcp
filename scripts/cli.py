@@ -3,7 +3,11 @@
 import argparse
 
 from mcp_openapi.parser import Spec
-from mcp_openapi.tools import tools_from_spec, get_tool_function_body
+from mcp_openapi.tools import (
+    tools_from_spec,
+    get_tool_function_body,
+    create_tool_function_exec,
+)
 
 
 def parse_command(args: argparse.Namespace) -> None:
@@ -19,11 +23,11 @@ def parse_command(args: argparse.Namespace) -> None:
     if args.file:
         spec = Spec.from_file(
             args.file,
-            args.routes,
+            args.paths,
             use_cache=False,
         )
     else:
-        spec = Spec.from_url(args.url, args.routes, use_cache=False)
+        spec = Spec.from_url(args.url, args.paths, use_cache=False)
 
     print(spec)
 
@@ -41,11 +45,11 @@ def tools_command(args: argparse.Namespace) -> None:
     if args.file:
         spec = Spec.from_file(
             args.file,
-            args.routes,
+            args.paths,
             use_cache=False,
         )
     else:
-        spec = Spec.from_url(args.url, args.routes, use_cache=False)
+        spec = Spec.from_url(args.url, args.paths, use_cache=False)
 
     print("\n----- Tools Definitions -----\n")
     tools = tools_from_spec(spec, args.forward_query_params)
@@ -66,6 +70,10 @@ def tools_command(args: argparse.Namespace) -> None:
     for tool in tools:
         print(get_tool_function_body(tool) + "\n")
 
+    # Ensure the tool functions are valid python. Throws an exception if not.
+    for tool in tools:
+        create_tool_function_exec(tool)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="MCP OpenAPI CLI tools")
@@ -84,7 +92,7 @@ def main() -> None:
         type=str,
     )
     parse_parser.add_argument(
-        "--routes",
+        "--paths",
         nargs="+",
         required=True,
         help="Route patterns to include (regex)",
@@ -103,7 +111,7 @@ def main() -> None:
         type=str,
     )
     tools_parser.add_argument(
-        "--routes",
+        "--paths",
         nargs="+",
         required=True,
         help="Route patterns to include (regex)",
