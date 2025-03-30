@@ -47,7 +47,7 @@ def tools_command(args: argparse.Namespace) -> None:
     else:
         config = Config.from_url(args.url, args.routes, use_cache=False)
 
-    tools = tools_from_config(config)
+    tools = tools_from_config(config, args.forward_query_params)
     for tool in tools:
         print(f"\nTool: {tool.name}")
         print(f"Description: {tool.description}")
@@ -100,6 +100,11 @@ def main() -> None:
         nargs="+",
         required=True,
         help="Route patterns to include (regex)",
+    )
+    tools_parser.add_argument(
+        "--forward-query-params",
+        nargs="+",
+        help="Query parameters to forward to the tool",
     )
 
     args = parser.parse_args()

@@ -1,15 +1,27 @@
 servers:
   - namespace: stripe
-    # Define headers to forward to the API
-    headers:
+    # Forward the Authorization header to the Stripe API
+    forward_headers:
       - Authorization
     name: Stripe API
     url: https://raw.githubusercontent.com/stripe/openapi/refs/heads/master/openapi/spec3.yaml
     base_url: https://api.stripe.com
     # Select which API paths to expose over MCP. Each matching path will become a tool with arguments
     # from the query parameters or the JSON body.
+    # For example, we're only exposing the endpoints to GET/POST a customer.
     paths:
       - /v1/customers$
+
+  - namespace: weather
+    name: Open Weather API
+    url: https://gist.githubusercontent.com/mor10/6fb15f2270f8ac1d8b99aa66f9b63410/raw/0e2c4ed43eb4c126ec2284bc7c069de488b53d99/openweatherAPI.json
+    base_url: https://api.openweathermap.org
+    paths:
+      - /data/2.5/weather
+    # Forward the x-open-weather-app-id header to the api_id query parameter.
+    forward_query_params:
+      - x-open-weather-app-id: appid
+    timeout: 0.5
 
   - namespace: httpbin
     name: httpbin
@@ -22,19 +34,3 @@ servers:
       - /headers
       - /user-agent
 
-  # - namespace: zendesk
-  #   name: Zendesk API
-  #   url: file://apis/zendesk-oas.yaml
-  #   base_url: https://api.zendesk.com
-  #   paths:
-  #     - /api/v2/tickets$
-  #     - /api/v2/users$
-
-  - namespace: weather
-    name: Open Meteo API
-    url: https://raw.githubusercontent.com/open-meteo/open-meteo/refs/heads/main/openapi.yml
-    base_url: https://api.open-meteo.com
-    # Forward the API key from the client's query parameters
-    paths:
-      - /v1/forecast$
-    timeout: 0.5

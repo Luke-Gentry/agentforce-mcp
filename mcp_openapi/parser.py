@@ -93,6 +93,23 @@ class FilterPaths(Document):
         return ctx
 
 
+class RemovePaths(Document):
+    def parsed(self, ctx: "Document.Context") -> "Document.Context":
+        """
+        emtpy the paths - not needed
+        """
+        keys_allowed = [
+            "openapi",
+            "info",
+            "paths",
+            "components",
+        ]
+        for key in list(ctx.document.keys()):
+            if key not in keys_allowed:
+                del ctx.document[key]
+        return ctx
+
+
 class Config:
     @classmethod
     def from_file(
@@ -145,7 +162,7 @@ class Config:
         api = aiopenapi3.OpenAPI.load_sync(
             url,
             loader=aiopenapi3.FileSystemLoader(pathlib.Path("")),
-            plugins=[FilterPaths(path_patterns)],
+            plugins=[RemovePaths(), FilterPaths(path_patterns)],
         )
         config = cls._from_api(api, path_patterns)
 
@@ -230,7 +247,7 @@ class Config:
         cls, item_schema, api, depth, max_depth, visited
     ) -> Schema:
         """Helper method to process array items"""
-        if hasattr(item_schema, "ref"):
+        if hasattr(item_schema, "ref") and item_schema.ref:
             item_name = item_schema.ref.split("/")[-1]
             resolved_item_schema = api.components.schemas[item_name]
             if resolved_item_schema.type == "object":
@@ -280,7 +297,7 @@ class Config:
             return None
 
         # Handle circular references
-        if hasattr(schema, "ref"):
+        if hasattr(schema, "ref") and schema.ref:
             schema_ref = schema.ref
             if schema_ref in visited:
                 log.debug(f"Circular reference detected for schema {schema_ref}")
@@ -288,7 +305,7 @@ class Config:
             visited.add(schema_ref)
 
         # Resolve schema
-        if hasattr(schema, "ref"):
+        if hasattr(schema, "ref") and schema.ref:
             schema_name = schema.ref.split("/")[-1]
             resolved_schema = api.components.schemas[schema_name]
         else:
@@ -373,7 +390,7 @@ class Config:
                     if (
                         prop_schema.anyOf
                         or prop_schema.allOf
-                        or hasattr(prop_schema, "ref")
+                        or (hasattr(prop_schema, "ref") and prop_schema.ref)
                     ):
                         # For allOf/anyOf/ref we want to inline the properties
                         nested_schema = cls._process_schema(

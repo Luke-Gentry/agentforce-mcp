@@ -33,8 +33,14 @@ class Tool(BaseModel):
 
     @classmethod
     def from_operation(
-        cls, path: str, method_name: str, operation: parser.Operation
+        cls,
+        path: str,
+        method_name: str,
+        operation: parser.Operation,
+        exclude_params: list[str] = None,
     ) -> "Tool":
+        exclude_params = exclude_params or []
+
         # Ensure array types come first with reversed sorting,
         # so we always pick the array name + type over the regular.
         seen_params = set()
@@ -55,6 +61,9 @@ class Tool(BaseModel):
                         f" Options: {', '.join(str(e) for e in param.enum[:2])}..."
                     )
                 description = f"{description}{enum_desc}".strip()
+
+            if param.name in exclude_params:
+                continue
 
             tool_params.append(
                 ToolParameter(
@@ -99,7 +108,7 @@ class Tool(BaseModel):
                     pass
         return cls(
             name=cls._to_fn_name(operation.id),
-            description=operation.summary,
+            description=operation.summary or operation.description or "",
             parameters=tool_params,
             method=method_name,
             path=path,
@@ -196,7 +205,9 @@ class Tool(BaseModel):
         return py_type
 
 
-def tools_from_config(config: parser.Config) -> list[Tool]:
+def tools_from_config(
+    config: parser.Config, forward_query_params: list[str]
+) -> list[Tool]:
     tools = []
     for path in config.paths:
         for method_name, operation in [
@@ -209,7 +220,14 @@ def tools_from_config(config: parser.Config) -> list[Tool]:
             if not operation:
                 continue
 
-            tools.append(Tool.from_operation(path.path, method_name, operation))
+            tools.append(
+                Tool.from_operation(
+                    path.path,
+                    method_name,
+                    operation,
+                    exclude_params=forward_query_params,
+                )
+            )
 
     return tools
 

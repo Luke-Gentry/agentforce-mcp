@@ -92,8 +92,8 @@ class ServerManager:
         url = server_config["url"]
         base_url = server_config["base_url"]
         paths = server_config["paths"]
-        forward_headers = server_config.get("headers", [])
-        forward_query_params = server_config.get("query_params", [])
+        forward_headers = server_config.get("forward_headers", [])
+        forward_query_params = server_config.get("forward_query_params", [])
 
         log.info(f"Starting server for {name} ({namespace})")
 
@@ -129,7 +129,7 @@ class ServerManager:
                 message_path=f"/{namespace}/messages/",
             )
 
-            tools = tools_from_config(config)
+            tools = tools_from_config(config, forward_query_params.keys())
             self.tools[namespace] = tools
 
             for tool in tools:

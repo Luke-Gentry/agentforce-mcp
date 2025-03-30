@@ -15,7 +15,7 @@ class MCPProxy:
     def __init__(
         self,
         forward_headers: Optional[List[str]] = None,
-        forward_query_params: Optional[List[str]] = None,
+        forward_query_params: Optional[Dict[str, str]] = None,
         client_builder: Optional[Callable[[], httpx.AsyncClient]] = None,
         timeout: Optional[float] = None,
     ):
@@ -23,7 +23,7 @@ class MCPProxy:
 
         Args:
             forward_headers: List of headers to forward from the request to the server
-            forward_query_params: List of query parameters to forward from the request to the server
+            forward_query_params: Dict header name -> query param name to forward from the request to the server
             client_builder: Function that returns an AsyncClient. Defaults to creating a new httpx.AsyncClient
         """
         self.forward_headers = forward_headers
@@ -57,12 +57,12 @@ class MCPProxy:
                 if header in request.headers:
                     request_headers[header] = request.headers[header]
 
-        # Forward specified query parameters
-        if self.forward_query_params and params:
-            forwarded_params = {
-                k: v for k, v in params.items() if k in self.forward_query_params
-            }
-            params = forwarded_params
+        # Forward from headers to query params
+        if self.forward_query_params:
+            params = params or {}
+            for header_name, query_param_name in self.forward_query_params.items():
+                if header_name in request.headers.keys():
+                    params[query_param_name] = request.headers[header_name]
 
         # Filter out None values from params and json_body
         if params:

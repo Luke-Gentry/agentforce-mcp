@@ -105,16 +105,25 @@ async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
 
 
 @pytest.mark.asyncio
-async def test_proxy_forward_query_params(proxy, mock_request, mock_httpx_client):
+async def test_proxy_forward_query_params(proxy, mock_httpx_client):
     """Test that only specified query parameters are forwarded."""
-    proxy.forward_query_params = ["api_key", "appid"]
+    proxy.forward_query_params = {"x-open-weather-app-id": "appid"}
 
     url = "https://api.example.com/test"
     params = {
-        "api_key": "secret123",
-        "appid": "weather123",
-        "other_param": "should_not_forward",
+        "other_param": "will_also_be_included",
     }
+    mock_request = Request(
+        scope={
+            "type": "http",
+            "headers": [
+                (b"authorization", b"Bearer test-token"),
+                (b"content-type", b"application/json"),
+                (b"x-custom-header", b"test-value"),
+                (b"x-open-weather-app-id", b"weather123"),
+            ],
+        }
+    )
 
     response = await proxy.do_request(
         request=mock_request,
@@ -129,11 +138,11 @@ async def test_proxy_forward_query_params(proxy, mock_request, mock_httpx_client
     mock_httpx_client.request.assert_called_once_with(
         method="GET",
         url=url,
-        params={
-            "api_key": "secret123",
-            "appid": "weather123",
-        },
         json=None,
+        params={
+            "appid": "weather123",
+            "other_param": "will_also_be_included",
+        },
         headers={},
         timeout=None,
     )
