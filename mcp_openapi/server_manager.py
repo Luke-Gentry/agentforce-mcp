@@ -46,7 +46,7 @@ class ServerManager:
                         "description": tool.description,
                         "parameters": [
                             param.model_dump(exclude={"request_body_field"})
-                            for param in tool.parameters
+                            for param in tool.all_params()
                         ],
                     }
                     for tool in tools

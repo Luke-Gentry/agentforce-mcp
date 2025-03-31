@@ -58,6 +58,7 @@ class RequestBody(BaseModel):
     content: Optional[Dict[str, Any]] = None
     required: bool = False
     schema_: Optional[Schema] = None
+    content_type: Optional[str] = None
     encoding: Optional[Dict[str, Dict[str, Any]]] = None
 
 
@@ -466,6 +467,7 @@ class Spec:
         if operation.requestBody:
             schema = None
             encoding = None
+            content_type = None
 
             # Handle form-encoded content
             if (
@@ -475,6 +477,7 @@ class Spec:
                 content = operation.requestBody.content[
                     "application/x-www-form-urlencoded"
                 ]
+                content_type = "application/x-www-form-urlencoded"
                 if content.schema_:
                     schema = cls._process_schema(content.schema_, api)
                 if content.encoding:
@@ -498,6 +501,7 @@ class Spec:
                     "application/json"
                 ].schema_
                 schema = cls._process_schema(content_schema, api)
+                content_type = "application/json"
 
             request_body = RequestBody(
                 description=getattr(operation.requestBody, "description", None),
@@ -505,6 +509,7 @@ class Spec:
                 required=bool(getattr(operation.requestBody, "required", False)),
                 schema_=schema,
                 encoding=encoding,
+                content_type=content_type,
             )
 
         return Operation(

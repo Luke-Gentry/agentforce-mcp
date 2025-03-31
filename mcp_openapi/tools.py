@@ -1,6 +1,8 @@
 # stdlib
 import re
 from typing import Any, Union, Callable
+from collections import defaultdict
+from itertools import chain
 
 # 3p
 from pydantic import BaseModel
@@ -27,7 +29,8 @@ class ToolParameter(BaseModel):
 class Tool(BaseModel):
     name: str
     description: str
-    parameters: list[ToolParameter]
+    query_params: list[ToolParameter]
+    body_by_content_type: dict[str, list[ToolParameter]] | None = None
     method: str
     path: str
 
@@ -42,7 +45,8 @@ class Tool(BaseModel):
         exclude_params = exclude_params or []
 
         seen_params = set()
-        tool_params = []
+        query_params = []
+        by_content_type = defaultdict(list)
 
         # Ensure array types come first with reversed sorting,
         # so we always pick the array name + type over the regular.
@@ -65,7 +69,7 @@ class Tool(BaseModel):
             if param.name in exclude_params:
                 continue
 
-            tool_params.append(
+            query_params.append(
                 ToolParameter(
                     name=cls._to_python_arg(param.name),
                     type=cls._to_python_type(param),
@@ -93,7 +97,7 @@ class Tool(BaseModel):
                     description = (
                         f"{param.description}, one of: ({') OR ('.join(descriptions)})"
                     )
-                    tool_params.append(
+                    by_content_type[operation.request_body_.content_type].append(
                         ToolParameter(
                             name=param.name,
                             type=cls._to_python_type(param),
@@ -107,7 +111,9 @@ class Tool(BaseModel):
                     for all_of in param.all_of:
                         props = all_of.properties if all_of.properties else [all_of]
                         for p in props:
-                            tool_params.append(
+                            by_content_type[
+                                operation.request_body_.content_type
+                            ].append(
                                 ToolParameter(
                                     name=f"{param.name}_{p.name}",
                                     type=cls._to_python_type(p),
@@ -122,7 +128,7 @@ class Tool(BaseModel):
                     # skipping multiple nested properties in tools for now.
                     pass
                 else:
-                    tool_params.append(
+                    by_content_type[operation.request_body_.content_type].append(
                         ToolParameter(
                             name=param.name,
                             type=cls._to_python_type(param),
@@ -136,9 +142,17 @@ class Tool(BaseModel):
             description=cls._to_python_description(
                 operation.summary or operation.description or ""
             ),
-            parameters=tool_params,
+            query_params=query_params,
+            body_by_content_type=by_content_type,
             method=method_name,
             path=path,
+        )
+
+    def all_params(self) -> list[ToolParameter]:
+        if not self.body_by_content_type:
+            return self.query_params
+        return self.query_params + list(
+            chain.from_iterable(self.body_by_content_type.values())
         )
 
     @classmethod
@@ -275,8 +289,8 @@ def _set_body_field(request_body_field: str, body_dict: dict, value: Any):
 
 
 def get_tool_function_body(tool: Tool) -> str:
-    params = []
-    for param in tool.parameters:
+    param_fields = []
+    for param in tool.all_params():
         param_str = f"{param.name}: {param.type}"
         field_parts = []
         if param.description:
@@ -287,26 +301,33 @@ def get_tool_function_body(tool: Tool) -> str:
         )
         field_parts.append(f"default={default_value}")
         param_str += f" = Field({', '.join(field_parts)})"
-        params.append(param_str)
+        param_fields.append(param_str)
 
     # Build the request body field assignments
     body_assignments = []
-    for param in tool.parameters:
-        if param.request_body_field:
-            body_assignments.append(
-                f'    _set_body_field("{param.request_body_field}", json_body, {param.name})'
-            )
+    if tool.body_by_content_type:
+        for content_type, params in tool.body_by_content_type.items():
+            for param in params:
+                if content_type == "application/x-www-form-urlencoded":
+                    body_assignments.append(
+                        f'    form_data["{param.request_body_field}"] = {param.name}'
+                    )
+                else:
+                    body_assignments.append(
+                        f'    _set_body_field("{param.request_body_field}", json_body, {param.name})'
+                    )
 
     body_assignments_str = "\n".join(body_assignments)
 
     return f"""async def {tool.name}(
         ctx: Context,
-        {",\n        ".join(params)}
+        {",\n        ".join(param_fields)}
     ) -> dict:
     \"\"\"{tool.description}\"\"\"
     base_url = ctx.request_context.lifespan_context.base_url
     proxy = ctx.request_context.lifespan_context.proxy
-    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.parameters if not p.request_body_field)} }}
+    params = {{ {', '.join(f'"{p.name}": {p.name}' for p in tool.query_params)} }}
+    form_data = {{}}
     json_body = {{}}
 {body_assignments_str}
 
@@ -315,6 +336,7 @@ def get_tool_function_body(tool: Tool) -> str:
         method="{tool.method}",
         url=f"{{base_url}}{tool.path}",
         params=params,
+        form_data=form_data,
         json_body=json_body,
     )
     return response.text"""
