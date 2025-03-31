@@ -105,7 +105,7 @@ docker run -p 8000:8000 \
 
 The project includes two example clients that demonstrate different ways to interact with the MCP-OpenAPI server. Both examples use the same server configuration and demonstrate header forwarding for authentication. The low-level client is particularly useful for custom integrations or when you need more direct control over the MCP client.
 
-- **[Low-Level Client](client-examples/low_level_client.py))**: This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
+- **[Low-Level Client](client-examples/low_level_client.py)**: This example demonstrates direct usage of the MCP client with SSE transport using the low level client.
 - **[LangChain Integration](client-examples/langchain_client.py)**: This example shows how to integrate the MCP-OpenAPI server with LangChain (using the [langchain-mcp-adapters](https://github.com/langchain-ai/langchain-mcp-adapters)), allowing AI agents to use these APIs through LangChain's tool system.
 
 ## Limitations
