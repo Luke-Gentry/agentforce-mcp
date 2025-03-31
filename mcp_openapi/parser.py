@@ -26,6 +26,7 @@ class Schema(BaseModel):
     items: Optional["Schema"] = None
     properties: Optional[List["Schema"]] = None
     description: Optional[str] = None
+    default: Optional[Any] = None
     any_of: Optional[List["Schema"]] = None  # For anyOf schemas
     all_of: Optional[List["Schema"]] = None  # For allOf schemas
 
@@ -44,6 +45,7 @@ class Parameter(BaseModel):
     type: Optional[str] = None
     enum: Optional[List[Any]] = None
     default: Optional[Any] = None
+    items: Optional["Schema"] = None
 
 
 class Response(BaseModel):
@@ -58,6 +60,7 @@ class RequestBody(BaseModel):
     content: Optional[Dict[str, Any]] = None
     required: bool = False
     schema_: Optional[Schema] = None
+    content_type: Optional[str] = None
     encoding: Optional[Dict[str, Dict[str, Any]]] = None
 
 
@@ -353,19 +356,20 @@ class Spec:
         # Handle array type
         elif resolved_schema.type == "array":
             if not resolved_schema.items:
-                return Schema(name=schema_name, type="array", properties=[])
+                return Schema(name=schema_name, type="array", properties=[], default=[])
 
             processed_items = cls._process_schema(
                 resolved_schema.items, api, depth + 1, max_depth, visited
             )
             if not processed_items:
-                return Schema(name=schema_name, type="array", properties=[])
+                return Schema(name=schema_name, type="array", properties=[], default=[])
 
             properties.append(
                 Schema(
                     name="inline",
                     type="array",
                     description=resolved_schema.description,
+                    default=[],
                     items=Schema(
                         name="item",
                         type=resolved_schema.items.type or "object",
@@ -386,6 +390,7 @@ class Spec:
                     prop.items = cls._process_array_items(
                         prop_schema.items, api, depth, max_depth, visited
                     )
+                    prop.default = []
                 elif prop_type == "object":
                     if (
                         prop_schema.anyOf
@@ -443,6 +448,15 @@ class Spec:
             if param.schema_.default:
                 param_dict["default"] = param.schema_.default
 
+            # Add array sub-type information if needed.
+            # FIXME: May need support for nested types.
+            if hasattr(param.schema_, "items") and param.schema_.items:
+                param_dict["items"] = Schema(
+                    name="item",
+                    type=param.schema_.items.type or "object",
+                )
+                param_dict["default"] = []
+
             processed_params.append(Parameter(**param_dict))
 
         processed_responses = {}
@@ -466,6 +480,7 @@ class Spec:
         if operation.requestBody:
             schema = None
             encoding = None
+            content_type = None
 
             # Handle form-encoded content
             if (
@@ -475,6 +490,7 @@ class Spec:
                 content = operation.requestBody.content[
                     "application/x-www-form-urlencoded"
                 ]
+                content_type = "application/x-www-form-urlencoded"
                 if content.schema_:
                     schema = cls._process_schema(content.schema_, api)
                 if content.encoding:
@@ -498,6 +514,7 @@ class Spec:
                     "application/json"
                 ].schema_
                 schema = cls._process_schema(content_schema, api)
+                content_type = "application/json"
 
             request_body = RequestBody(
                 description=getattr(operation.requestBody, "description", None),
@@ -505,6 +522,7 @@ class Spec:
                 required=bool(getattr(operation.requestBody, "required", False)),
                 schema_=schema,
                 encoding=encoding,
+                content_type=content_type,
             )
 
         return Operation(

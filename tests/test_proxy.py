@@ -69,6 +69,7 @@ async def test_proxy_params(proxy, mock_request, mock_httpx_client):
         url=url,
         params=params,
         json=None,
+        data=None,
         headers={},
         timeout=None,
     )
@@ -96,6 +97,7 @@ async def test_proxy_forward_headers(proxy, mock_request, mock_httpx_client):
         url=url,
         params=None,
         json=None,
+        data=None,
         headers={
             "authorization": "Bearer test-token",
             "x-custom-header": "test-value",
@@ -139,6 +141,7 @@ async def test_proxy_forward_query_params(proxy, mock_httpx_client):
         method="GET",
         url=url,
         json=None,
+        data=None,
         params={
             "appid": "weather123",
             "other_param": "will_also_be_included",
@@ -169,6 +172,7 @@ async def test_proxy_json_body(proxy, mock_request, mock_httpx_client):
         url=url,
         params=None,
         json=json_body,
+        data=None,
         headers={},
         timeout=None,
     )

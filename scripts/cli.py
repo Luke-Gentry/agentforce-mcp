@@ -58,13 +58,19 @@ def tools_command(args: argparse.Namespace) -> None:
         print(f"Description: {tool.description}")
         print(f"Method: {tool.method}")
         print(f"Path: {tool.path}")
-        print("Parameters:")
-        for param in tool.parameters:
+        print("Query Params:")
+        for param in tool.query_params:
             print(f"  - {param.name}: {param.type}")
             if param.description:
                 print(f"    Description: {param.description}")
-            if param.request_body_field:
-                print(f"    Request Body Field: {param.request_body_field}")
+        for content_type, params in tool.body_by_content_type.items():
+            print(f"Body Params ({content_type}):")
+            for param in params:
+                print(f"  - {param.name}: {param.type}")
+                if param.description:
+                    print(f"    Description: {param.description}")
+                if param.request_body_field:
+                    print(f"    Request Body Field: {param.request_body_field}")
 
     print("\n----- Tool Functions -----\n")
     for tool in tools:

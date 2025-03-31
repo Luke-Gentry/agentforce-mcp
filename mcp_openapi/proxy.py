@@ -37,6 +37,7 @@ class MCPProxy:
         method: str,
         url: str,
         params: Optional[Dict[str, Any]] = None,
+        form_data: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
     ) -> httpx.Response:
         """Execute an HTTP request.
@@ -45,6 +46,7 @@ class MCPProxy:
             method: HTTP method (GET, POST, etc.)
             url: The URL to make the request to
             params: Query parameters
+            form_data: Form data
             json_body: JSON body data
 
         Returns:
@@ -64,11 +66,13 @@ class MCPProxy:
                 if header_name in request.headers.keys():
                     params[query_param_name] = request.headers[header_name]
 
-        # Filter out None values from params and json_body
+        # Filter out None values
         if params:
             params = {k: v for k, v in params.items() if v is not None}
         if json_body:
             json_body = {k: v for k, v in json_body.items() if v is not None}
+        if form_data:
+            form_data = {k: v for k, v in form_data.items() if v is not None}
 
         # Log the request
         log.info(f"Making {method} request to {url}")
@@ -85,6 +89,7 @@ class MCPProxy:
                 url=url,
                 params=params,
                 json=json_body,
+                data=form_data,
                 headers=request_headers,
                 timeout=self.timeout,
             )

@@ -33,7 +33,7 @@ servers:
       - /data/2.5/weather
     # Forward the x-open-weather-app-id header to the api_id query parameter.
     forward_query_params:
-      - x-open-weather-app-id: appid
+      x-open-weather-app-id: appid
     timeout: 0.5
 
   # Just an example to show reading a local file url

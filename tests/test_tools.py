@@ -30,7 +30,7 @@ def mock_tool():
     return Tool(
         name="test_tool",
         description="A test tool",
-        parameters=[
+        query_params=[
             ToolParameter(
                 name="param1", type="str", description="First parameter", default="None"
             ),
@@ -40,14 +40,18 @@ def mock_tool():
                 description="Second parameter",
                 default="None",
             ),
-            ToolParameter(
-                name="body_param",
-                type="dict",
-                description="Body parameter",
-                default="None",
-                request_body_field="test.body_param",
-            ),
         ],
+        body_by_content_type={
+            "application/json": [
+                ToolParameter(
+                    name="body_param",
+                    type="dict",
+                    description="Body parameter",
+                    default="None",
+                    request_body_field="test.body_param",
+                )
+            ]
+        },
         method="POST",
         path="/test/path",
     )
@@ -83,7 +87,7 @@ def weather_tool():
     return Tool(
         name="get_forecast",
         description="Get weather forecast",
-        parameters=[
+        query_params=[
             ToolParameter(
                 name="temperature_unit",
                 type="str",
@@ -169,7 +173,9 @@ def mock_operation():
 
     # Create request body
     request_body = RequestBody(
-        description="Test request body", schema_=request_body_schema
+        description="Test request body",
+        schema_=request_body_schema,
+        content_type="application/json",
     )
 
     # Create parameters
@@ -298,7 +304,7 @@ def test_tool_parameter_conversion():
     tool = Tool(
         name="test_tool",
         description="A test tool",
-        parameters=[
+        query_params=[
             ToolParameter(
                 name="string_param",
                 type="str",
@@ -454,7 +460,7 @@ def test_tool_from_operation(mock_operation):
     assert tool.path == "/test/path"
 
     # Test parameter types and conversions
-    param_map = {p.name: p for p in tool.parameters}
+    param_map = {p.name: p for p in tool.all_params()}
 
     # Test basic type conversions
     assert param_map["string_param"].type == "str"
@@ -505,7 +511,7 @@ def test_tool_from_operation_with_long_enum():
     )
 
     tool = Tool.from_operation("/test/path", "POST", operation)
-    param = tool.parameters[0]
+    param = tool.all_params()[0]
 
     # Verify the enum description is truncated
     assert param.description.startswith(
@@ -602,8 +608,8 @@ def test_end_to_end_weather_api():
         assert tool.method == "GET"
         assert tool.path == "/v1/forecast"
 
-        assert len(tool.parameters) == 3
-        param_map = {p.name: p for p in tool.parameters}
+        assert len(tool.all_params()) == 3
+        param_map = {p.name: p for p in tool.query_params}
 
         temp_param = param_map["temperature_unit"]
         assert temp_param.type == "str"
@@ -801,10 +807,9 @@ def test_end_to_end_form_encoded_api():
         assert tool.path == "/v1/customers"
 
         # Verify parameters
-        assert (
-            len(tool.parameters) == 4
-        )  # name, email, address, metadata (invoice_settings is skipped as it's a nested object)
-        param_map = {p.name: p for p in tool.parameters}
+        form_params = tool.body_by_content_type["application/x-www-form-urlencoded"]
+        assert len(form_params) == 4
+        param_map = {p.name: p for p in form_params}
 
         # Test basic string parameters
         name_param = param_map["name"]
@@ -843,13 +848,13 @@ def test_end_to_end_form_encoded_api():
         name_param = sig.parameters["name"]
         assert (
             str(name_param)
-            == "name: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"The customer's full name or business name.\")"
+            == 'name: str = FieldInfo(annotation=NoneType, required=False, default=None, description="The customer\'s full name or business name.")'
         )
 
         email_param = sig.parameters["email"]
         assert (
             str(email_param)
-            == "email: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"Customer's email address\")"
+            == 'email: str = FieldInfo(annotation=NoneType, required=False, default=None, description="Customer\'s email address")'
         )
 
         address_param = sig.parameters["address"]
