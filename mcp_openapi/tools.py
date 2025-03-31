@@ -21,9 +21,18 @@ MAX_ENUM_DESCRIPTION_LENGTH = 100
 class ToolParameter(BaseModel):
     name: str
     type: str
-    default: Any
+    default: Any | None = None
     request_body_field: str | None = None
     description: str | None = None
+
+    def default_value(self) -> Any:
+        """Return the default value used in FieldInfo when rendering the function."""
+        if self.default is None:
+            return None
+        elif isinstance(self.default, str):
+            return f'"{self.default}"'
+        else:
+            return self.default
 
 
 class Tool(BaseModel):
@@ -103,7 +112,7 @@ class Tool(BaseModel):
                             type=cls._to_python_type(param),
                             description=cls._to_python_description(description),
                             request_body_field=param.name,
-                            default="None",
+                            default=param.default,
                         )
                     )
                     seen_params.add(param.name)
@@ -120,8 +129,8 @@ class Tool(BaseModel):
                                     description=cls._to_python_description(
                                         p.description
                                     ),
-                                    default="None",
                                     request_body_field=f"{param.name}.{p.name}",
+                                    default=p.default,
                                 )
                             )
                 elif param.properties:
@@ -133,8 +142,8 @@ class Tool(BaseModel):
                             name=param.name,
                             type=cls._to_python_type(param),
                             description=cls._to_python_description(param.description),
-                            default="None",
                             request_body_field=param.name,
+                            default=param.default,
                         )
                     )
         return cls(
@@ -245,6 +254,11 @@ class Tool(BaseModel):
             py_type = "float"
         elif param.type == "boolean":
             py_type = "bool"
+        elif param.type == "array":
+            if param.items:
+                py_type = f"list[{cls._to_python_type(param.items)}]"
+            else:
+                py_type = "list[Any]"
 
         if hasattr(param, "name") and param.name.endswith("[]"):
             py_type = f"list[{py_type}]"
@@ -296,9 +310,7 @@ def get_tool_function_body(tool: Tool) -> str:
         if param.description:
             field_parts.append(f'description="{param.description}"')
         # Quote string defaults
-        default_value = (
-            f'"{param.default}"' if isinstance(param.default, str) else param.default
-        )
+        default_value = param.default_value()
         field_parts.append(f"default={default_value}")
         param_str += f" = Field({', '.join(field_parts)})"
         param_fields.append(param_str)

@@ -848,13 +848,13 @@ def test_end_to_end_form_encoded_api():
         name_param = sig.parameters["name"]
         assert (
             str(name_param)
-            == "name: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"The customer's full name or business name.\")"
+            == 'name: str = FieldInfo(annotation=NoneType, required=False, default=None, description="The customer\'s full name or business name.")'
         )
 
         email_param = sig.parameters["email"]
         assert (
             str(email_param)
-            == "email: str = FieldInfo(annotation=NoneType, required=False, default='None', description=\"Customer's email address\")"
+            == 'email: str = FieldInfo(annotation=NoneType, required=False, default=None, description="Customer\'s email address")'
         )
 
         address_param = sig.parameters["address"]

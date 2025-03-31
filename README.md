@@ -111,7 +111,7 @@ The project includes two example clients that demonstrate different ways to inte
 
 ## Limitations
 
-- **Schema Complexity**: We currently have limited support for deeply nested types in schemas. Additional type support can be added based on needs.
+- **Handling of complex schemas**: This do our best to parse more complex schemas with type nesting but there are some limits in the current implementation. If you run against issues here let me know the spec and I can update accordingly.
 
 - **Context Window Usage**: Endpoints with many parameters may consume significant space in the AI model's context window. Be selective about which endpoints you expose to balance functionality and efficiency.
 
