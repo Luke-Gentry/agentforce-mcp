@@ -76,7 +76,6 @@ Then you can run your server:
 **Locally (requires [uv](https://github.com/astral-sh/uv))**
 
 ```bash
-uv sync
 uv run main.py
 ```
 
