@@ -8,4 +8,4 @@ aiopenapi3
 jinja2
 requests
 starlette
-
+mcp-openapi
