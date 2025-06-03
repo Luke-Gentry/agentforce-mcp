@@ -3,3 +3,9 @@ uvicorn
 httpx
 pyyaml
 watchdog
+mcp
+aiopenapi3
+jinja2
+requests
+starlette
+
